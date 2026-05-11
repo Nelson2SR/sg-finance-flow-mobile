@@ -33,6 +33,10 @@ yarn-error.*
 # local env files
 .env*.local
 
+# Personal bank statements / fixtures (never commit real PII)
+tests/**/*.pdf
+tests/fixtures/private/
+
 # typescript
 *.tsbuildinfo
 
