@@ -26,7 +26,12 @@ export interface ChatMessage {
 
 interface CopilotState {
   messages: ChatMessage[];
-  isTyping: boolean;
+  /**
+   * Personas currently composing a reply — drives the typing indicator
+   * bubble in the chat. Each persona's LLM call sets+unsets its own
+   * entry, so the user sees who is thinking when both personas are on.
+   */
+  typingPersonas: CopilotPersona[];
   /**
    * Personas the user has invited into the chat. All enabled personas
    * reply to each user message in the same thread — this is a group
@@ -37,7 +42,7 @@ interface CopilotState {
   addMessage: (
     msg: Omit<ChatMessage, 'id' | 'timestamp' | 'persona'> & { persona?: CopilotPersona },
   ) => void;
-  setTyping: (status: boolean) => void;
+  setPersonaTyping: (persona: CopilotPersona, isTyping: boolean) => void;
   togglePersona: (persona: CopilotPersona) => void;
   clearChat: () => void;
 }
@@ -62,7 +67,7 @@ const nextId = () =>
 
 export const useCopilotStore = create<CopilotState>(set => ({
   messages: [seedMessage('advisor')],
-  isTyping: false,
+  typingPersonas: [],
   enabledPersonas: ['advisor'],
 
   addMessage: msg =>
@@ -81,7 +86,17 @@ export const useCopilotStore = create<CopilotState>(set => ({
       ],
     })),
 
-  setTyping: status => set({ isTyping: status }),
+  setPersonaTyping: (persona, isTyping) =>
+    set(state => {
+      const isPresent = state.typingPersonas.includes(persona);
+      if (isTyping && !isPresent) {
+        return { typingPersonas: [...state.typingPersonas, persona] };
+      }
+      if (!isTyping && isPresent) {
+        return { typingPersonas: state.typingPersonas.filter(p => p !== persona) };
+      }
+      return state;
+    }),
 
   togglePersona: persona =>
     set(state => {

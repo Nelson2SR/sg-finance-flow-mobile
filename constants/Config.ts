@@ -16,13 +16,20 @@ export const API_CONFIG = {
 };
 
 // Skip the Master Passphrase / vault unlock flow in dev builds.
-// Flip to `false` to exercise the real vault during development.
+// The "master passphrase" is a local-only second-factor stored in
+// SecureStore (iOS Keychain). On first unlock whatever you type becomes
+// the passphrase; subsequent unlocks just compare locally. It is *not*
+// sent to the backend and currently doesn't encrypt anything — it's a
+// placeholder for the eventual E2E-encrypted vault flow. Flip to false
+// to exercise the screen.
 export const DEV_DISABLE_VAULT = __DEV__;
 
-// Skip the username/password login screen entirely in dev. AuthContext
-// auto-seeds a fake token so AuthGuard lets the user straight into /(tabs).
-// Flip to `false` to test the real login flow.
-export const DEV_DISABLE_AUTH = __DEV__;
+// Skip the username/password login screen entirely in dev. When true,
+// AuthContext auto-seeds DEV_FAKE_TOKEN and AuthGuard lets the user
+// straight into /(tabs) — convenient, but the backend rejects that
+// token with 401, so the Copilot endpoint falls back to canned phrases.
+// Set to `false` to test against the real backend (live Gemini replies).
+export const DEV_DISABLE_AUTH = false;
 
 // Fake token used when DEV_DISABLE_AUTH is on. Anything truthy works.
 export const DEV_FAKE_TOKEN = 'dev-bypass-token';

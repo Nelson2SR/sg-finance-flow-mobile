@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -15,6 +16,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useCopilotStore, WidgetPayload, CopilotPersona } from '../../store/useCopilotStore';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { scanDocumentWithGemini, ScanResponse, ScannedTransaction } from '../../services/geminiService';
+import { chatWithCopilot, FinanceSnapshot } from '../../services/copilotService';
 import { MagicScanReviewModal } from '../../components/features/MagicScanModal';
 import { Surface, SurfaceHeaderArea, GradientCard, ScreenHeader } from '../../components/ui';
 import { useThemeColors } from '../../hooks/use-theme-colors';
@@ -54,48 +56,6 @@ export const PERSONA_CONFIG: Record<
   },
 };
 
-// Quick canned reply pools — original generic phrasing. Real RAG lives in
-// services/geminiService once we wire it up.
-const RESPONSES: Record<CopilotPersona, { transfer: string; scan: string; default: string[] }> = {
-  advisor: {
-    transfer: 'Got it — please verify the transfer details before I move funds:',
-    scan: 'Sure. Pick a statement or receipt and I will extract the line items for your vault.',
-    default: [
-      'Your Dining category is trending high this month. Consider a 2-week cap to stay inside your Safe-to-Spend.',
-      'Cashflow looks healthy — income outpaces spend by ~24%. A quick win: route the surplus into the Japan Trip vault.',
-      'Heads up: a subscription renewal is due in 3 days. Want me to forecast its impact on this month?',
-    ],
-  },
-  friend: {
-    transfer: 'No pressure either way — sit with it for a minute. I will keep the details below in case you want to come back to them.',
-    scan: 'Of course. Drop the receipt in whenever you are ready. No rush.',
-    default: [
-      'You are doing better than you think. Small steps add up — proud of you for checking in today.',
-      'Money stuff can feel heavy. Want to talk about what is on your mind, or should we just look at the numbers together?',
-      'Pause and breathe. Whatever the balance says, your worth is not the number. What feels most overwhelming right now?',
-    ],
-  },
-};
-
-const pickReply = (persona: CopilotPersona, text: string) => {
-  const raw = text.toLowerCase();
-  if (raw.includes('scan') || raw.includes('receipt')) {
-    return { text: RESPONSES[persona].scan };
-  }
-  if (raw.includes('transfer') || raw.includes('move')) {
-    return {
-      text: RESPONSES[persona].transfer,
-      widget: {
-        type: 'TRANSFER_CONFIRM' as const,
-        amount: 50,
-        sourceWallet: 'Personal',
-        targetWallet: 'Trip',
-      },
-    };
-  }
-  const pool = RESPONSES[persona].default;
-  return { text: pool[Math.floor(Math.random() * pool.length)] };
-};
 
 export default function ChatCopilotScreen() {
   const themeColors = useThemeColors();
@@ -106,7 +66,11 @@ export default function ChatCopilotScreen() {
   const messages = useCopilotStore(s => s.messages);
   const addMessage = useCopilotStore(s => s.addMessage);
   const enabledPersonas = useCopilotStore(s => s.enabledPersonas);
+  const typingPersonas = useCopilotStore(s => s.typingPersonas);
+  const setPersonaTyping = useCopilotStore(s => s.setPersonaTyping);
 
+  const wallets = useFinanceStore(s => s.wallets);
+  const transactions = useFinanceStore(s => s.transactions);
   const addTransactionsBatch = useFinanceStore(s => s.addTransactionsBatch);
   const activeWalletId = useFinanceStore(s => s.activeWalletId);
 
@@ -114,20 +78,59 @@ export default function ChatCopilotScreen() {
   const [scanResult, setScanResult] = useState<ScanResponse | null>(null);
   const [scanModalVisible, setScanModalVisible] = useState(false);
 
-  // Send the user message, then every enabled persona replies in sequence
-  // with a small stagger so the bubbles don't all land at the same frame.
+  // Build the per-call snapshot at send time so the LLM sees the latest
+  // vaults + transactions even after the user just scanned a receipt.
+  const buildSnapshot = (): FinanceSnapshot => ({
+    wallets: wallets.map(w => ({
+      name: w.name,
+      type: w.type,
+      currency: w.currency,
+      balance: w.balance,
+    })),
+    recentTransactions: [...transactions]
+      .sort((a, b) => b.date.getTime() - a.date.getTime())
+      .slice(0, 10)
+      .map(t => ({
+        merchant: t.merchant,
+        category: t.category,
+        amount: t.amount,
+        type: t.type === 'INCOME' ? 'INCOME' : 'EXPENSE',
+        date: t.date.toISOString().slice(0, 10),
+      })),
+  });
+
+  // Send the user message, then every enabled persona calls Gemini in
+  // parallel. Each persona maintains its own typing indicator so the user
+  // sees who is composing when both are on. Failures fall back to a
+  // canned phrase inside copilotService.chatWithCopilot.
   const handleSend = () => {
     if (!inputText.trim()) return;
     const userText = inputText;
     addMessage({ sender: 'user', text: userText });
     setInputText('');
 
-    enabledPersonas.forEach((persona, idx) => {
-      const { text, widget } = pickReply(persona, userText);
-      setTimeout(
-        () => addMessage({ sender: 'bot', text, persona, widget }),
-        650 + idx * 900,
-      );
+    const snapshot = buildSnapshot();
+    // Capture history *before* the user message lands in the store so the
+    // LLM sees the prior turns, with the new user message as the latest
+    // prompt passed in directly.
+    const history = messages;
+
+    enabledPersonas.forEach(persona => {
+      setPersonaTyping(persona, true);
+      // Hold the typing bubble for a random 1–2s window even if the LLM
+      // returns sooner. This is the WeChat-style "feels human" beat —
+      // instant replies break the friend illusion, and on real network
+      // round-trips the LLM is usually slower than the floor anyway.
+      const minTypingMs = 1000 + Math.random() * 1000;
+      const minTyping = new Promise<void>(resolve => setTimeout(resolve, minTypingMs));
+      Promise.all([
+        chatWithCopilot({ persona, message: userText, history, snapshot }),
+        minTyping,
+      ])
+        .then(([reply]) => {
+          addMessage({ sender: 'bot', text: reply.text, persona });
+        })
+        .finally(() => setPersonaTyping(persona, false));
     });
 
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
@@ -265,6 +268,27 @@ export default function ChatCopilotScreen() {
             </View>
           );
         })}
+
+        {typingPersonas.map(p => {
+          const cfg = PERSONA_CONFIG[p];
+          return (
+            <View key={`typing:${p}`} className="mb-5 flex-row justify-start">
+              <View
+                className="w-7 h-7 rounded-full justify-center items-center mr-2.5 mt-1"
+                style={{ backgroundColor: cfg.tint }}>
+                <Ionicons name={cfg.avatarIcon} size={12} color="#fff" />
+              </View>
+              <View className="max-w-[80%]">
+                <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-1 ml-1">
+                  {cfg.label} is typing…
+                </Text>
+                <GradientCard padding="md" radius="row" accent={cfg.cardAccent}>
+                  <TypingDots color={themeColors.textMid} />
+                </GradientCard>
+              </View>
+            </View>
+          );
+        })}
       </ScrollView>
 
       <KeyboardAvoidingView
@@ -376,4 +400,47 @@ function ActionWidget({ payload }: { payload: WidgetPayload }) {
     );
   }
   return null;
+}
+
+/**
+ * Three dots that pulse 0.3 → 1 → 0.3 in a staggered wave — the
+ * "someone is typing" idiom from every chat app. Uses the RN Animated
+ * API (useNativeDriver: true) so the tween runs on the UI thread and
+ * doesn't compete with the LLM call landing on the JS thread.
+ */
+function TypingDots({ color }: { color: string }) {
+  const dots = useRef([
+    new Animated.Value(0.3),
+    new Animated.Value(0.3),
+    new Animated.Value(0.3),
+  ]).current;
+
+  useEffect(() => {
+    const loops = dots.map(dot =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(dot, { toValue: 1, duration: 260, useNativeDriver: true }),
+          Animated.timing(dot, { toValue: 0.3, duration: 540, useNativeDriver: true }),
+        ]),
+      ),
+    );
+    // Stagger the start of each loop so the dots run as a wave instead
+    // of all pulsing in unison.
+    const timeouts = loops.map((loop, i) => setTimeout(() => loop.start(), i * 180));
+    return () => {
+      timeouts.forEach(clearTimeout);
+      loops.forEach(l => l.stop());
+    };
+  }, [dots]);
+
+  return (
+    <View className="flex-row items-center gap-1.5 py-1">
+      {dots.map((opacity, i) => (
+        <Animated.View
+          key={i}
+          style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color, opacity }}
+        />
+      ))}
+    </View>
+  );
 }

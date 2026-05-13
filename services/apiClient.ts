@@ -43,11 +43,58 @@ export interface ApiAccount {
 export const financeApi = {
   getAccounts: () => apiClient.get<ApiAccount[]>('/accounts'),
   getTransactions: (params?: any) => apiClient.get<{ items: ApiTransaction[], total: number }>('/transactions', { params }),
-  confirmUpload: (data: { 
-    file_hash: string, 
-    bank: string, 
-    account_type: string, 
+  confirmUpload: (data: {
+    file_hash: string,
+    bank: string,
+    account_type: string,
     account_name: string,
-    transactions: any[] 
+    transactions: any[]
   }) => apiClient.post('/upload/confirm', data),
+};
+
+
+// ─── Copilot (LLM-backed chat) ────────────────────────────────────────────
+// Mirror of the backend's CopilotChatRequest/Response. Keep this file the
+// single source of truth for over-the-wire shape so both ends stay aligned.
+
+export interface CopilotMessageDto {
+  role: 'user' | 'model';
+  text: string;
+}
+
+export interface CopilotWalletSnapshotDto {
+  name: string;
+  type: string;
+  currency: string;
+  balance: number;
+}
+
+export interface CopilotTransactionSnapshotDto {
+  merchant: string;
+  category: string;
+  amount: number;
+  type: 'INCOME' | 'EXPENSE';
+  date: string; // YYYY-MM-DD
+}
+
+export interface CopilotSnapshotDto {
+  wallets: CopilotWalletSnapshotDto[];
+  recent_transactions: CopilotTransactionSnapshotDto[];
+}
+
+export interface CopilotChatRequestDto {
+  persona: 'advisor' | 'friend';
+  message: string;
+  history: CopilotMessageDto[];
+  snapshot?: CopilotSnapshotDto;
+}
+
+export interface CopilotChatResponseDto {
+  text: string;
+  fallback: boolean;
+}
+
+export const copilotApi = {
+  chat: (body: CopilotChatRequestDto) =>
+    apiClient.post<CopilotChatResponseDto>('/copilot/chat', body),
 };
