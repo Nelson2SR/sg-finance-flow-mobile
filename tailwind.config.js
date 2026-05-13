@@ -2,6 +2,9 @@
 module.exports = {
   content: ["./app/**/*.{js,jsx,ts,tsx}", "./components/**/*.{js,jsx,ts,tsx}"],
   presets: [require("nativewind/preset")],
+  // Manual class-based dark mode so the in-app Dark Mode toggle in Settings
+  // can flip the theme via nativewind's useColorScheme().setColorScheme().
+  darkMode: 'class',
   theme: {
     extend: {
       fontFamily: {
@@ -54,10 +57,36 @@ module.exports = {
           link: '#377CC8',
           dark: '#242424',
           surface: '#F4F6F9'
-        }
+        },
+        // === Liquid Glass design system — see docs/UI_DESIGN.md ===
+        // Surfaces and text are theme-aware via CSS variables defined in
+        // global.css under :root (light) and .dark (dark). Accents stay
+        // constant across both themes.
+        surface: {
+          0: 'rgb(var(--surface-0) / <alpha-value>)',
+          1: 'rgb(var(--surface-1) / <alpha-value>)',
+          2: 'rgb(var(--surface-2) / <alpha-value>)',
+          3: 'rgb(var(--surface-3) / <alpha-value>)',
+        },
+        hairline: 'var(--hairline)',
+        text: {
+          high: 'rgb(var(--text-high) / <alpha-value>)',
+          mid: 'rgb(var(--text-mid) / <alpha-value>)',
+          low: 'rgb(var(--text-low) / <alpha-value>)',
+          dim: 'rgb(var(--text-dim) / <alpha-value>)',
+        },
+        accent: {
+          coral: '#FF6B4A',
+          mint: '#5BE0B0',
+          rose: '#FF5C7C',
+          amber: '#FFB547',
+        },
       },
       boxShadow: {
         'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
+        'glow-coral': '0 0 24px rgba(255, 107, 74, 0.45)',
+        'glow-mint': '0 0 24px rgba(91, 224, 176, 0.35)',
+        'card': '0 8px 24px rgba(0, 0, 0, 0.6)',
       }
     },
   },

@@ -9,6 +9,16 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: jest.fn(),
 }));
 
+// AuthContext reads DEV_DISABLE_AUTH/VAULT from Config and auto-seeds a
+// dev token when true. Pin the flags off so these tests exercise the real
+// SecureStore-backed auth path. There's a separate test for the dev bypass.
+jest.mock('../../constants/Config', () => ({
+  DEV_DISABLE_AUTH: false,
+  DEV_DISABLE_VAULT: false,
+  DEV_FAKE_TOKEN: 'dev-bypass-token',
+  API_CONFIG: { BASE_URL: 'http://localhost:8000/api/v1' },
+}));
+
 describe('AuthContext TDD', () => {
   const wrapper = ({ children }: { children: React.ReactNode }) => (
     <AuthProvider>{children}</AuthProvider>

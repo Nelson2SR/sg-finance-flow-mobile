@@ -1,3 +1,72 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ============================================================================
+   Liquid Glass design system — theme tokens.
+   tailwind.config.js references these via `rgb(var(--token) / <alpha-value>)`
+   for color tokens and `var(--hairline)` for the pre-composed hairline.
+
+   Values are stored as space-separated RGB triples so Tailwind's alpha-value
+   syntax (e.g. `bg-surface-2/60`) can combine them.
+   ========================================================================= */
+
+@layer base {
+  /* Light theme is the default. Applies whenever no ancestor carries the
+     `dark` class (set by the wrapper in app/_layout.tsx based on
+     useColorScheme() from nativewind). */
+  :root {
+    --surface-0: 250 251 252;   /* near-white base, slight cool tint */
+    --surface-1: 244 246 249;   /* header / nav blur base */
+    --surface-2: 255 255 255;   /* card surface — pops over the base */
+    --surface-3: 238 240 245;   /* pressed / input / sheet */
+
+    --hairline: rgba(15, 23, 42, 0.08);
+
+    --text-high: 15 23 42;      /* near-black */
+    --text-mid: 71 85 105;
+    --text-low: 148 163 184;
+    --text-dim: 203 213 225;
+  }
+
+  /* Dark theme overrides. Two activation paths:
+     1. `@media (prefers-color-scheme: dark)` — the primary native path.
+        react-native-css-interop resolves this against the active scheme,
+        so iOS/Android OS dark mode flips tokens automatically without
+        needing a `.dark` class anywhere in the tree.
+     2. `.dark` class on documentElement (web only) — set by the
+        useEffect in app/_layout.tsx so the in-app Dark Mode toggle in
+        Settings still overrides OS preference on the web build.
+     Wrapping a `<View className="dark">` around the navigator was tried
+     earlier and crashed iOS new arch with a "missing navigation context"
+     error, so we explicitly avoid that pattern. */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface-0: 5 6 10;
+      --surface-1: 11 12 18;
+      --surface-2: 21 23 31;
+      --surface-3: 30 33 43;
+
+      --hairline: rgba(255, 255, 255, 0.06);
+
+      --text-high: 245 246 248;
+      --text-mid: 158 168 184;
+      --text-low: 97 109 125;
+      --text-dim: 56 64 78;
+    }
+  }
+
+  .dark {
+    --surface-0: 5 6 10;
+    --surface-1: 11 12 18;
+    --surface-2: 21 23 31;
+    --surface-3: 30 33 43;
+
+    --hairline: rgba(255, 255, 255, 0.06);
+
+    --text-high: 245 246 248;
+    --text-mid: 158 168 184;
+    --text-low: 97 109 125;
+    --text-dim: 56 64 78;
+  }
+}

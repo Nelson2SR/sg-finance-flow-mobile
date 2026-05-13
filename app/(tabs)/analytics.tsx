@@ -1,45 +1,61 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Dimensions, TouchableOpacity, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg, { Defs, LinearGradient, Stop, Path, Circle } from 'react-native-svg';
+import { View, Text, ScrollView, Pressable, Platform } from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { CreateBudgetModal } from '../../components/features/CreateBudgetModal';
-import { BlurView } from 'expo-blur';
+import { Surface, SurfaceHeaderArea, GradientCard, ScreenHeader, NeonButton } from '../../components/ui';
+import { useThemeColors } from '../../hooks/use-theme-colors';
 
-const { width } = Dimensions.get('window');
+const AURA_RADIUS = 100;
+const AURA_CIRCUMFERENCE = 2 * Math.PI * AURA_RADIUS;
 
-const AmbientAura = ({ overallLimit, currentSpend }: { overallLimit: number, currentSpend: number }) => {
-  const ratio = Math.min(currentSpend / (overallLimit || 1), 1);
+const AmbientAura = ({ overallLimit, currentSpend }: { overallLimit: number; currentSpend: number }) => {
+  const themeColors = useThemeColors();
+  const ratio = overallLimit > 0 ? Math.min(currentSpend / overallLimit, 1) : 0;
   const remaining = Math.max(overallLimit - currentSpend, 0);
-  
-  let colors = { start: '#469B88', end: '#469B88', shadow: 'rgba(70, 155, 136, 0.2)' };
-  if (ratio > 0.8) colors = { start: '#E0533D', end: '#E0533D', shadow: 'rgba(224, 83, 61, 0.2)' };
-  else if (ratio > 0.5) colors = { start: '#fbbf24', end: '#d97706', shadow: 'rgba(245, 158, 11, 0.2)' };
+
+  // Arc color shifts through mint → amber → rose as the spend ratio climbs.
+  let stroke = '#5BE0B0';
+  if (ratio > 0.8) stroke = '#FF5C7C';
+  else if (ratio > 0.5) stroke = '#FFB547';
+
+  // stroke-dasharray on a full Circle avoids the degenerate-arc bug from
+  // the previous Path-based implementation.
+  const dashLength = ratio * AURA_CIRCUMFERENCE;
 
   return (
-    <View className="items-center justify-center my-10">
-      <View style={{ shadowColor: colors.shadow, shadowRadius: 40, shadowOpacity: 1, shadowOffset: { width: 0, height: 10 } }}>
-        <Svg width={240} height={240} viewBox="0 0 240 240">
-          <Circle cx={120} cy={120} r={100} stroke="#f3f4f6" strokeWidth={14} fill="transparent" className="dark:stroke-gray-900" />
-          <Path 
-            d={`M 120 20 A 100 100 0 ${ratio > 0.5 ? 1 : 0} 1 ${120 + 100 * Math.sin(ratio * Math.PI * 2)} ${120 - 100 * Math.cos(ratio * Math.PI * 2)}`}
-            stroke={colors.start}
+    <View className="items-center justify-center my-8">
+      <Svg width={240} height={240} viewBox="0 0 240 240">
+        <Circle cx={120} cy={120} r={AURA_RADIUS} stroke={themeColors.hairline} strokeWidth={14} fill="transparent" />
+        {ratio > 0 && (
+          <Circle
+            cx={120}
+            cy={120}
+            r={AURA_RADIUS}
+            stroke={stroke}
             strokeWidth={14}
             strokeLinecap="round"
             fill="transparent"
+            strokeDasharray={`${dashLength} ${AURA_CIRCUMFERENCE}`}
+            transform="rotate(-90 120 120)"
           />
-        </Svg>
-        <View className="absolute inset-0 items-center justify-center">
-            <Text className="font-jakarta text-gray-400 font-jakarta-bold tracking-widest text-[10px] uppercase mb-1">Safe to Spend</Text>
-            <Text className="font-jakarta text-gray-900 dark:text-white text-5xl font-light tracking-tighter">${remaining.toFixed(0)}</Text>
-        </View>
+        )}
+      </Svg>
+      <View className="absolute inset-0 items-center justify-center">
+        <Text className="font-jakarta-bold text-text-low tracking-widest text-[10px] uppercase mb-1">
+          Safe to Spend
+        </Text>
+        <Text className="font-jakarta-light text-text-high text-[40px] tracking-tighter">
+          ${remaining.toFixed(0)}
+        </Text>
       </View>
     </View>
   );
 };
 
 export default function AnalyticsScreen() {
+  const themeColors = useThemeColors();
   const transactions = useFinanceStore(s => s.transactions);
   const activeWalletId = useFinanceStore(s => s.activeWalletId);
   const budgets = useFinanceStore(s => s.budgets);
@@ -47,7 +63,7 @@ export default function AnalyticsScreen() {
 
   const activeBudgets = budgets.filter(b => b.wallets === 'ALL' || b.wallets.includes(activeWalletId));
   const globalBudgetCap = activeBudgets.length > 0 ? activeBudgets.reduce((a, b) => a + b.amount, 0) : 4000;
-  
+
   const currentSpendRaw = transactions
     .filter(t => t.type === 'EXPENSE' && (activeBudgets.length > 0 ? true : t.walletId === activeWalletId))
     .reduce((acc, curr) => acc + curr.amount, 0);
@@ -56,107 +72,167 @@ export default function AnalyticsScreen() {
   const totalSpend = transactions.filter(t => t.type === 'EXPENSE').reduce((a, b) => a + b.amount, 0);
   const cashflowMax = Math.max(totalIncome, totalSpend) || 1;
 
-  const renderComparativeCashflow = () => (
-     <View className="bg-white/90 dark:bg-gray-900/40 rounded-[24px] p-6 border border-white/20 shadow-xl mb-8">
-        <Text className="font-jakarta text-gray-900 dark:text-white font-jakarta-bold text-lg mb-8">Cashflow Momentum</Text>
-        <View className="flex-row items-end gap-8 justify-center h-44">
-           <View className="items-center flex-1">
-              <View className="w-14 bg-emerald-500/80 rounded-[8px]" style={{ height: `${(totalIncome / cashflowMax) * 100}%`, minHeight: 10 }} />
-              <Text className="font-jakarta text-emerald-600 font-jakarta-bold mt-4 text-base">${totalIncome}</Text>
-              <Text className="font-jakarta text-gray-400 font-jakarta-bold text-[10px] uppercase tracking-widest mt-1">Income</Text>
-           </View>
-           <View className="items-center flex-1">
-              <View className="w-14 bg-rose-500/80 rounded-[8px]" style={{ height: `${(totalSpend / cashflowMax) * 100}%`, minHeight: 10 }} />
-              <Text className="font-jakarta text-rose-600 font-jakarta-bold mt-4 text-base">${totalSpend}</Text>
-              <Text className="font-jakarta text-gray-400 font-jakarta-bold text-[10px] uppercase tracking-widest mt-1">Spend</Text>
-           </View>
-        </View>
-     </View>
-  );
+  // Fixed bar zone so bars never grow past the card and clip the title.
+  const CASHFLOW_BAR_AREA = 140;
+  const incomeBarHeight = Math.max((totalIncome / cashflowMax) * CASHFLOW_BAR_AREA, 8);
+  const spendBarHeight = Math.max((totalSpend / cashflowMax) * CASHFLOW_BAR_AREA, 8);
 
   return (
-    <View className="flex-1 bg-white dark:bg-black">
-      <SafeAreaView edges={['top']} className="z-20">
-        <BlurView intensity={95} tint="light" className="px-6 pb-6 pt-2 border-b border-white/20">
-          <View className="flex-row justify-between items-center">
-             <View>
-                <Text className="font-jakarta text-gray-400 font-jakarta-bold text-[10px] uppercase tracking-widest mb-1">Insights Hub</Text>
-                <Text className="font-jakarta text-gray-900 dark:text-white text-2xl font-jakarta-bold">Analytics</Text>
-             </View>
-             <TouchableOpacity 
-                onPress={() => setBudgetModalVisible(true)}
-                className="bg-brand-500 px-4 py-2.5 rounded-xl flex-row items-center gap-2 shadow-lg shadow-brand-500/40"
-             >
-                <Ionicons name="add" size={18} color="#fff" />
-                <Text className="font-jakarta text-white font-jakarta-bold text-xs">New Budget</Text>
-             </TouchableOpacity>
-          </View>
-        </BlurView>
-      </SafeAreaView>
+    <Surface>
+      <SurfaceHeaderArea>
+        <ScreenHeader
+          eyebrow="Insights Hub"
+          title="Analytics"
+          action={
+            <NeonButton
+              icon="add"
+              size="sm"
+              onPress={() => setBudgetModalVisible(true)}>
+              New Budget
+            </NeonButton>
+          }
+        />
+      </SurfaceHeaderArea>
 
-      <ScrollView 
-        className="flex-1" 
-        contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: Platform.OS === 'ios' ? 120 : 100, paddingTop: 20 }}
-        showsVerticalScrollIndicator={false}
-      >
-        <AmbientAura overallLimit={globalBudgetCap} currentSpend={currentSpendRaw} />
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{
+          paddingHorizontal: 24,
+          paddingBottom: Platform.OS === 'ios' ? 120 : 100,
+          paddingTop: 12,
+        }}
+        showsVerticalScrollIndicator={false}>
+        <GradientCard padding="lg" accent="coral" className="mb-8 items-center">
+          <AmbientAura overallLimit={globalBudgetCap} currentSpend={currentSpendRaw} />
+        </GradientCard>
 
-        {renderComparativeCashflow()}
-
-        <View className="mb-10">
-            <Text className="font-jakarta text-gray-900 dark:text-white text-xl font-jakarta-bold mb-6">Active Routines</Text>
-            
-            {activeBudgets.length === 0 ? (
-               <TouchableOpacity 
-                 onPress={() => setBudgetModalVisible(true)}
-                 className="bg-gray-50/50 dark:bg-gray-900/20 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-[24px] p-8 items-center justify-center"
-               >
-                  <Ionicons name="pie-chart-outline" size={32} className="color-gray-300 mb-4" />
-                  <Text className="font-jakarta text-gray-400 font-jakarta-bold text-center text-sm uppercase tracking-widest">No active budgets</Text>
-               </TouchableOpacity>
-            ) : (
-               <View className="gap-4">
-                  {activeBudgets.map(b => {
-                     const artificialSpend = transactions.filter(t => t.merchant && t.type === 'EXPENSE').reduce((a,c) => a+c.amount, 0) % b.amount; 
-                     const p = Math.min(artificialSpend / b.amount, 1);
-                     return (
-                        <View key={b.id} className="bg-white/90 dark:bg-gray-900/40 border border-white/20 rounded-[20px] p-5 shadow-xl">
-                           <View className="flex-row justify-between mb-4">
-                              <View>
-                                <Text className="font-jakarta text-gray-900 dark:text-white font-jakarta-bold text-base">{b.name}</Text>
-                                <Text className="font-jakarta text-gray-400 font-jakarta-bold text-[10px] uppercase tracking-widest mt-1">{b.recurrence}</Text>
-                              </View>
-                              <View className="items-end">
-                                <Text className="font-jakarta-bold text-gray-900 dark:text-white text-base">${artificialSpend.toFixed(0)}</Text>
-                                <Text className="font-jakarta text-gray-400 font-jakarta-bold text-[10px] uppercase tracking-widest mt-1">of ${b.amount}</Text>
-                              </View>
-                           </View>
-                           <View className="h-3 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                              <View className={`h-full rounded-full ${p > 0.8 ? 'bg-rose-500' : 'bg-brand-500'}`} style={{ width: `${p * 100}%` }} />
-                           </View>
-                        </View>
-                     )
-                  })}
-               </View>
-            )}
-        </View>
-
-        <Text className="font-jakarta text-gray-900 dark:text-white text-xl font-jakarta-bold mb-6">Subscription Drains</Text>
-        <View className="bg-white/90 dark:bg-gray-900/40 rounded-[20px] p-5 border border-white/20 shadow-xl flex-row justify-between items-center mb-4">
-            <View className="flex-row items-center gap-4">
-                <View className="w-12 h-12 bg-rose-50 dark:bg-rose-900/20 rounded-xl justify-center items-center">
-                    <Ionicons name="videocam-outline" size={20} color="#E0533D" />
-                </View>
-                <View>
-                    <Text className="font-jakarta text-gray-900 dark:text-white font-jakarta-bold text-base">Netflix Standard</Text>
-                    <Text className="font-jakarta text-rose-500 font-jakarta-bold text-[10px] uppercase tracking-widest mt-1">Renews in 3 days</Text>
-                </View>
+        <GradientCard padding="lg" className="mb-8">
+          <Text className="font-jakarta-bold text-text-high text-lg mb-6">Cashflow Momentum</Text>
+          <View className="flex-row gap-8 justify-center" style={{ height: CASHFLOW_BAR_AREA }}>
+            <View className="flex-1 items-center justify-end">
+              <View
+                className="w-14 rounded-[8px]"
+                style={{
+                  height: incomeBarHeight,
+                  backgroundColor: '#5BE0B0',
+                  boxShadow: '0 0 18px rgba(91, 224, 176, 0.35)',
+                }}
+              />
             </View>
-            <Text className="font-jakarta text-gray-900 dark:text-white font-jakarta-bold text-lg">-$15.99</Text>
+            <View className="flex-1 items-center justify-end">
+              <View
+                className="w-14 rounded-[8px]"
+                style={{
+                  height: spendBarHeight,
+                  backgroundColor: '#FF5C7C',
+                  boxShadow: '0 0 18px rgba(255, 92, 124, 0.35)',
+                }}
+              />
+            </View>
+          </View>
+          <View className="flex-row gap-8 justify-center mt-4">
+            <View className="flex-1 items-center">
+              <Text className="font-jakarta-bold text-accent-mint text-base">
+                ${totalIncome.toLocaleString()}
+              </Text>
+              <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mt-1">
+                Income
+              </Text>
+            </View>
+            <View className="flex-1 items-center">
+              <Text className="font-jakarta-bold text-accent-rose text-base">
+                ${totalSpend.toLocaleString()}
+              </Text>
+              <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mt-1">
+                Spend
+              </Text>
+            </View>
+          </View>
+        </GradientCard>
+
+        <View className="mb-8">
+          <Text className="font-jakarta-bold text-text-high text-xl mb-5">Active Routines</Text>
+
+          {activeBudgets.length === 0 ? (
+            <Pressable onPress={() => setBudgetModalVisible(true)}>
+              <View
+                className="rounded-[24px] p-8 items-center justify-center bg-surface-2/40"
+                style={{
+                  borderStyle: 'dashed',
+                  borderWidth: 1.5,
+                  borderColor: themeColors.textDim,
+                }}>
+                <Ionicons name="pie-chart-outline" size={28} color={themeColors.textLow} />
+                <Text className="font-jakarta-bold text-text-low text-center text-xs uppercase tracking-widest mt-3">
+                  No active budgets
+                </Text>
+              </View>
+            </Pressable>
+          ) : (
+            <View className="gap-3">
+              {activeBudgets.map(b => {
+                const artificialSpend =
+                  transactions
+                    .filter(t => t.merchant && t.type === 'EXPENSE')
+                    .reduce((a, c) => a + c.amount, 0) % b.amount;
+                const p = Math.min(artificialSpend / b.amount, 1);
+                const overBudget = p > 0.8;
+                return (
+                  <GradientCard key={b.id} padding="md" radius="row">
+                    <View className="flex-row justify-between mb-4">
+                      <View>
+                        <Text className="font-jakarta-bold text-text-high text-base">{b.name}</Text>
+                        <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mt-1">
+                          {b.recurrence}
+                        </Text>
+                      </View>
+                      <View className="items-end">
+                        <Text className="font-jakarta-bold text-text-high text-base">
+                          ${artificialSpend.toFixed(0)}
+                        </Text>
+                        <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mt-1">
+                          of ${b.amount}
+                        </Text>
+                      </View>
+                    </View>
+                    <View className="h-2.5 bg-surface-3 rounded-full overflow-hidden">
+                      <View
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${p * 100}%`,
+                          backgroundColor: overBudget ? '#FF5C7C' : '#FF6B4A',
+                        }}
+                      />
+                    </View>
+                  </GradientCard>
+                );
+              })}
+            </View>
+          )}
         </View>
+
+        <Text className="font-jakarta-bold text-text-high text-xl mb-5">Subscription Drains</Text>
+        <GradientCard padding="md" radius="row">
+          <View className="flex-row justify-between items-center">
+            <View className="flex-row items-center gap-4">
+              <View
+                className="w-11 h-11 rounded-2xl bg-surface-3 justify-center items-center"
+                style={{ borderWidth: 1, borderColor: themeColors.hairline }}>
+                <Ionicons name="videocam-outline" size={18} color="#FF5C7C" />
+              </View>
+              <View>
+                <Text className="font-jakarta-bold text-text-high text-base">Netflix Standard</Text>
+                <Text className="font-jakarta-bold text-accent-rose text-[10px] uppercase tracking-widest mt-1">
+                  Renews in 3 days
+                </Text>
+              </View>
+            </View>
+            <Text className="font-jakarta-bold text-text-high text-base">-$15.99</Text>
+          </View>
+        </GradientCard>
       </ScrollView>
 
       <CreateBudgetModal visible={budgetModalVisible} onClose={() => setBudgetModalVisible(false)} />
-    </View>
+    </Surface>
   );
 }

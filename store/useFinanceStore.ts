@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import { financeApi, ApiTransaction, ApiAccount } from '../services/apiClient';
 
+// Monotonic ID minter. Prevents collisions when many items are added in the
+// same millisecond (e.g. forEach over a batch of scanned transactions).
+let _idSeq = 0;
+const mintId = (prefix: string) => `${prefix}_${Date.now()}_${++_idSeq}`;
 
 export type TransactionType = 'INCOME' | 'EXPENSE' | 'TRANSFER';
 
@@ -42,11 +46,28 @@ interface FinanceState {
   addWallet: (wallet: Omit<Wallet, 'id'>) => void;
   addBudget: (budget: Omit<Budget, 'id'>) => void;
   addTransaction: (tx: Omit<Transaction, 'id' | 'date'> & { date?: Date }, skipSync?: boolean) => void;
+  addTransactionsBatch: (
+    txs: (Omit<Transaction, 'id' | 'date'> & { date?: Date })[],
+  ) => { added: Transaction[]; skipped: number };
 
   deleteTransaction: (id: string) => void;
   syncData: () => Promise<void>;
   getTotalBalance: () => number;
 }
+
+// Signature used to detect duplicates across re-scans. Same walletId/day/
+// merchant/amount/type is treated as the same transaction.
+const txSignature = (tx: {
+  walletId: string;
+  date: Date;
+  merchant: string;
+  amount: number;
+  type: TransactionType;
+}) => {
+  const day = new Date(tx.date).toISOString().slice(0, 10);
+  const merchant = (tx.merchant || '').trim().toLowerCase();
+  return `${tx.walletId}|${day}|${merchant}|${tx.amount.toFixed(2)}|${tx.type}`;
+};
 
 
 export const useFinanceStore = create<FinanceState>((set, get) => ({
@@ -69,24 +90,64 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   setActiveWallet: (id) => set({ activeWalletId: id }),
 
   addWallet: (wallet) => set((state) => ({
-    wallets: [...state.wallets, { ...wallet, id: `w${Date.now()}` }]
+    wallets: [...state.wallets, { ...wallet, id: mintId('w') }]
   })),
 
   addBudget: (budget) => set((state) => ({
-     budgets: [...state.budgets, { ...budget, id: `b${Date.now()}` }]
+     budgets: [...state.budgets, { ...budget, id: mintId('b') }]
   })),
 
   addTransaction: (tx, skipSync = false) => set((state) => {
     // Generate new tx and adjust wallet balance logically
-    const newTx = { ...tx, id: Date.now().toString(), date: tx.date || new Date() };
+    const newTx = { ...tx, id: mintId('tx'), date: tx.date || new Date() };
 
     const modifier = tx.type === 'INCOME' ? tx.amount : -tx.amount;
-    
+
     return {
       transactions: [newTx, ...state.transactions],
       wallets: state.wallets.map(w => w.id === tx.walletId ? { ...w, balance: w.balance + modifier } : w)
     };
   }),
+
+  addTransactionsBatch: (txs) => {
+    const state = get();
+    const seen = new Set(state.transactions.map(txSignature));
+    const added: Transaction[] = [];
+    let skipped = 0;
+
+    for (const tx of txs) {
+      const resolved: Transaction = {
+        ...tx,
+        id: mintId('tx'),
+        date: tx.date || new Date(),
+      };
+      const sig = txSignature(resolved);
+      if (seen.has(sig)) {
+        skipped++;
+        continue;
+      }
+      seen.add(sig);
+      added.push(resolved);
+    }
+
+    if (added.length === 0) return { added, skipped };
+
+    // Aggregate wallet balance deltas per wallet for one consistent update.
+    const deltas = new Map<string, number>();
+    for (const t of added) {
+      const d = t.type === 'INCOME' ? t.amount : -t.amount;
+      deltas.set(t.walletId, (deltas.get(t.walletId) || 0) + d);
+    }
+
+    set((s) => ({
+      transactions: [...added, ...s.transactions],
+      wallets: s.wallets.map((w) =>
+        deltas.has(w.id) ? { ...w, balance: w.balance + (deltas.get(w.id) || 0) } : w,
+      ),
+    }));
+
+    return { added, skipped };
+  },
 
   syncData: async () => {
     try {
@@ -119,7 +180,11 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         activeWalletId: mappedWallets[0]?.id || 'w1'
       });
     } catch (error) {
-      console.error('Sync failed', error);
+      // Use warn (not error) so RN's LogBox doesn't pop a red banner —
+      // sync failures are non-fatal (the app falls back to seeded data)
+      // and commonly expected in dev when the backend is offline or the
+      // current token isn't valid against it.
+      console.warn('Sync failed', error);
     }
   },
 

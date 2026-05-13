@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Alert, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
 import { authService } from '../services/authService';
+import { DEV_DISABLE_VAULT } from '../constants/Config';
+import { Surface, GradientCard, NeonButton } from '../components/ui';
+import { useThemeColors } from '../hooks/use-theme-colors';
 
 
 export default function LoginScreen() {
   const router = useRouter();
+  const themeColors = useThemeColors();
   const { login, unlockVault, logout } = useAuth();
 
   const [username, setUsername] = useState('');
@@ -18,6 +21,7 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState(1); // 1: Login, 2: Passphrase
   const [isRegistering, setIsRegistering] = useState(false);
+  const [focused, setFocused] = useState<string | null>(null);
 
 
   const handleLogin = async () => {
@@ -30,9 +34,12 @@ export default function LoginScreen() {
     try {
       const data = await authService.login(username, password);
       await login(data.access_token, username);
-      setStep(2); // Move to passphrase step
+      if (DEV_DISABLE_VAULT) {
+        router.replace('/(tabs)');
+      } else {
+        setStep(2);
+      }
     } catch (error: any) {
-
       Alert.alert('Login Failed', error.response?.data?.detail || 'Please check your connection');
     } finally {
       setIsLoading(false);
@@ -51,7 +58,6 @@ export default function LoginScreen() {
       Alert.alert('Success', 'Account created! You can now log in.');
       setIsRegistering(false);
     } catch (error: any) {
-
       Alert.alert('Registration Failed', error.response?.data?.detail || 'Username might be taken');
     } finally {
       setIsLoading(false);
@@ -71,115 +77,127 @@ export default function LoginScreen() {
     }
   };
 
+  const titleCopy = step === 2 ? 'Unlock Vault' : isRegistering ? 'Create Vault' : 'Liquid Glass';
+  const subtitleCopy =
+    step === 2
+      ? 'Enter your Master Passphrase'
+      : isRegistering
+        ? 'Join the privacy-first ecosystem'
+        : 'Your privacy-first financial vault';
+
+  // Input recipe pulled out so all three fields stay visually identical.
+  const inputClass = (name: string) =>
+    `bg-surface-3 px-4 py-4 rounded-2xl text-text-high font-jakarta text-base border ${focused === name ? 'border-accent-coral' : 'border-hairline'}`;
+
   return (
-    <View className="flex-1 bg-white dark:bg-black">
-      <BlurView intensity={100} tint="dark" className="absolute inset-0" />
-      
-      <SafeAreaView className="flex-1 px-8 justify-center">
+    <Surface halo>
+      <SafeAreaView className="flex-1 px-6 justify-center">
         <View className="items-center mb-12">
-          <View className="w-20 h-20 rounded-[24px] bg-brand-500 justify-center items-center shadow-2xl shadow-brand-500/50 mb-6">
+          <View
+            className="w-20 h-20 rounded-[24px] bg-accent-coral justify-center items-center mb-6"
+            style={{ boxShadow: '0 0 32px rgba(255, 107, 74, 0.55)' }}>
             <Ionicons name="shield-checkmark" size={40} color="white" />
           </View>
-          <Text className="font-jakarta text-white text-3xl font-jakarta-bold text-center">
-            {step === 2 ? 'Unlock Vault' : (isRegistering ? 'Create Vault' : 'Liquid Glass')}
+          <Text className="font-jakarta-bold text-text-high text-[40px] tracking-tighter text-center">
+            {titleCopy}
           </Text>
-          <Text className="font-jakarta text-gray-400 text-center mt-2">
-            {step === 2 ? 'Enter your Master Passphrase' : (isRegistering ? 'Join the privacy-first ecosystem' : 'Your privacy-first financial vault')}
+          <Text className="font-jakarta text-text-mid text-center mt-2 text-sm">
+            {subtitleCopy}
           </Text>
-
         </View>
 
-        <View className="bg-white/10 p-8 rounded-[32px] border border-white/10 shadow-2xl">
+        <GradientCard padding="lg" accent="coral">
           {step === 1 ? (
             <>
-              <View className="mb-6">
-                <Text className="font-jakarta text-gray-400 font-jakarta-bold text-[10px] uppercase tracking-widest mb-2 px-1">Username</Text>
+              <View className="mb-5">
+                <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-2 px-1">
+                  Username
+                </Text>
                 <TextInput
                   value={username}
                   onChangeText={setUsername}
                   placeholder="e.g. Satoshi"
-                  placeholderTextColor="#666"
-                  className="bg-black/20 p-4 rounded-2xl text-white font-jakarta border border-white/5"
+                  placeholderTextColor={themeColors.textDim}
+                  className={inputClass('username')}
+                  onFocus={() => setFocused('username')}
+                  onBlur={() => setFocused(null)}
                   autoCapitalize="none"
                 />
               </View>
 
-              <View className="mb-8">
-                <Text className="font-jakarta text-gray-400 font-jakarta-bold text-[10px] uppercase tracking-widest mb-2 px-1">Password</Text>
+              <View className="mb-7">
+                <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-2 px-1">
+                  Password
+                </Text>
                 <TextInput
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry
                   placeholder="••••••••"
-                  placeholderTextColor="#666"
-                  className="bg-black/20 p-4 rounded-2xl text-white font-jakarta border border-white/5"
+                  placeholderTextColor={themeColors.textDim}
+                  className={inputClass('password')}
+                  onFocus={() => setFocused('password')}
+                  onBlur={() => setFocused(null)}
                 />
               </View>
 
-              <TouchableOpacity 
-                onPress={isRegistering ? handleRegister : handleLogin}
-                disabled={isLoading}
-                className="bg-brand-500 p-5 rounded-2xl items-center shadow-lg shadow-brand-500/30"
-              >
-                {isLoading ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <Text className="font-jakarta text-white font-jakarta-bold text-lg">
-                    {isRegistering ? 'Create Account' : 'Connect Vault'}
-                  </Text>
-                )}
-              </TouchableOpacity>
+              <NeonButton
+                size="lg"
+                block
+                loading={isLoading}
+                onPress={isRegistering ? handleRegister : handleLogin}>
+                {isRegistering ? 'Create Account' : 'Connect Vault'}
+              </NeonButton>
             </>
-
           ) : (
             <>
-              <View className="mb-8">
-                <Text className="font-jakarta text-gray-400 font-jakarta-bold text-[10px] uppercase tracking-widest mb-2 px-1">Master Passphrase</Text>
+              <View className="mb-7">
+                <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-2 px-1">
+                  Master Passphrase
+                </Text>
                 <TextInput
                   value={passphrase}
                   onChangeText={setPassphrase}
                   secureTextEntry
                   autoFocus
                   placeholder="Min. 16 characters"
-                  placeholderTextColor="#666"
-                  className="bg-black/20 p-4 rounded-2xl text-white font-jakarta border border-white/5"
+                  placeholderTextColor={themeColors.textDim}
+                  className={inputClass('passphrase')}
+                  onFocus={() => setFocused('passphrase')}
+                  onBlur={() => setFocused(null)}
                 />
               </View>
 
-              <TouchableOpacity 
-                onPress={handleUnlock}
-                className="bg-brand-500 p-5 rounded-2xl items-center shadow-lg shadow-brand-500/30"
-              >
-                <Text className="font-jakarta text-white font-jakarta-bold text-lg">Unlock Data</Text>
-              </TouchableOpacity>
+              <NeonButton size="lg" block onPress={handleUnlock}>
+                Unlock Data
+              </NeonButton>
             </>
           )}
-        </View>
+        </GradientCard>
 
         <View className="mt-8 items-center">
-          <TouchableOpacity 
-            onPress={() => setIsRegistering(!isRegistering)}
-          >
-            <Text className="font-jakarta text-gray-500">
-              {isRegistering ? 'Already have a vault?' : "Don't have a vault?"} 
-              <Text className="text-brand-500 font-jakarta-bold"> {isRegistering ? 'Login' : 'Register'}</Text>
+          <Pressable onPress={() => setIsRegistering(!isRegistering)}>
+            <Text className="font-jakarta text-text-mid text-sm">
+              {isRegistering ? 'Already have a vault?' : "Don't have a vault?"}{' '}
+              <Text className="text-accent-coral font-jakarta-bold">
+                {isRegistering ? 'Login' : 'Register'}
+              </Text>
             </Text>
-          </TouchableOpacity>
+          </Pressable>
 
-          <TouchableOpacity 
+          <Pressable
             className="mt-6"
             onPress={async () => {
               await logout();
               Alert.alert('Reset', 'Vault and local data cleared.');
               setStep(1);
-            }}
-          >
-            <Text className="font-jakarta text-gray-600 text-[10px] uppercase tracking-widest font-jakarta-bold">Reset Vault (Dev Only)</Text>
-          </TouchableOpacity>
+            }}>
+            <Text className="font-jakarta-bold text-text-dim text-[10px] uppercase tracking-widest">
+              Reset Vault (Dev Only)
+            </Text>
+          </Pressable>
         </View>
-
-
       </SafeAreaView>
-    </View>
+    </Surface>
   );
 }

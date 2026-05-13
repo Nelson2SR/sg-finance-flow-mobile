@@ -6,18 +6,62 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY ?? "";
 
-let genAI: GoogleGenerativeAI | null = null;
-let model: any = null;
+// Ordered by preference; on persistent 5xx/429 we fall through to the next.
+const MODEL_CHAIN = [
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
+  "gemini-2.0-flash",
+] as const;
 
-const getModel = () => {
+const MAX_RETRIES_PER_MODEL = 3;
+const BASE_BACKOFF_MS = 1000;
+
+let genAI: GoogleGenerativeAI | null = null;
+const modelCache = new Map<string, any>();
+
+const getModel = (name: string) => {
   if (!GEMINI_API_KEY) {
     throw new Error("EXPO_PUBLIC_GEMINI_API_KEY is not set. Add it to .env.local.");
   }
-  if (!model) {
-    genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+  if (!genAI) genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+  let cached = modelCache.get(name);
+  if (!cached) {
+    cached = genAI.getGenerativeModel({ model: name });
+    modelCache.set(name, cached);
   }
-  return model;
+  return cached;
+};
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// 503 (overloaded), 429 (rate limit), and other 5xx are transient.
+const isRetryableError = (err: any): boolean => {
+  const status = err?.status ?? err?.response?.status;
+  if (status === 429 || status === 503 || (status >= 500 && status < 600)) return true;
+  const msg = String(err?.message ?? "");
+  return /\b(503|429|overloaded|high demand|unavailable|rate.?limit)\b/i.test(msg);
+};
+
+const generateWithFallback = async (parts: any[]): Promise<any> => {
+  let lastError: any;
+  for (const modelName of MODEL_CHAIN) {
+    for (let attempt = 0; attempt < MAX_RETRIES_PER_MODEL; attempt++) {
+      try {
+        const model = getModel(modelName);
+        return await model.generateContent(parts);
+      } catch (err) {
+        lastError = err;
+        if (!isRetryableError(err)) throw err;
+        const delay = BASE_BACKOFF_MS * 2 ** attempt + Math.floor(Math.random() * 250);
+        console.warn(
+          `Gemini ${modelName} attempt ${attempt + 1}/${MAX_RETRIES_PER_MODEL} failed (retryable). Retrying in ${delay}ms.`,
+        );
+        await sleep(delay);
+      }
+    }
+    console.warn(`Gemini ${modelName} exhausted retries; falling through to next model.`);
+  }
+  throw lastError;
 };
 
 export interface ScannedTransaction {
@@ -90,8 +134,7 @@ export const scanDocumentWithGemini = async (uri: string, mimeType: string): Pro
       Only return the JSON. No preamble.
     `;
 
-    const model = getModel();
-    const result = await model.generateContent([
+    const result = await generateWithFallback([
       prompt,
       {
         inlineData: {

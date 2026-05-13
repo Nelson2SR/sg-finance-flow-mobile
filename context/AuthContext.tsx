@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { Alert } from 'react-native';
+import { DEV_DISABLE_AUTH, DEV_DISABLE_VAULT, DEV_FAKE_TOKEN } from '../constants/Config';
 
 interface AuthContextType {
   token: string | null;
@@ -26,6 +27,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   async function loadToken() {
+    if (DEV_DISABLE_AUTH) {
+      // Dev shortcut: bypass the real login + vault flow entirely so
+      // reloads land straight on /(tabs). Disabled in production via
+      // the __DEV__ gate in Config.ts.
+      setToken(DEV_FAKE_TOKEN);
+      setIsLoading(false);
+      return;
+    }
     try {
       const savedToken = await SecureStore.getItemAsync('userToken');
       if (savedToken) {
@@ -89,7 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     logout,
     unlockVault,
     isAuthenticated: !!token,
-    isVaultUnlocked: !!masterPassphrase,
+    isVaultUnlocked: DEV_DISABLE_VAULT ? !!token : !!masterPassphrase,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

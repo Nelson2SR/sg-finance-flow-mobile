@@ -1,10 +1,11 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Modal, Alert } from 'react-native';
+import { View, Text, Pressable, Modal, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
+import { useThemeColors } from '../../hooks/use-theme-colors';
 
 interface MagicScanWindowProps {
   visible: boolean;
@@ -13,12 +14,13 @@ interface MagicScanWindowProps {
 }
 
 export const MagicScanWindow = ({ visible, onClose, onSelectFile }: MagicScanWindowProps) => {
+  const themeColors = useThemeColors();
+
   const handleImportStatement = async () => {
     const result = await DocumentPicker.getDocumentAsync({
       type: 'application/pdf',
       copyToCacheDirectory: true,
     });
-
     if (!result.canceled && result.assets[0].uri) {
       onSelectFile(result.assets[0].uri, 'application/pdf');
     }
@@ -30,12 +32,7 @@ export const MagicScanWindow = ({ visible, onClose, onSelectFile }: MagicScanWin
       Alert.alert('Permission Denied', 'We need camera access to scan your receipts.');
       return;
     }
-
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      quality: 0.8,
-    });
-
+    const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.8 });
     if (!result.canceled && result.assets[0].uri) {
       onSelectFile(result.assets[0].uri, 'image/jpeg');
     }
@@ -47,25 +44,18 @@ export const MagicScanWindow = ({ visible, onClose, onSelectFile }: MagicScanWin
       Alert.alert('Permission Denied', 'We need gallery access to upload photos.');
       return;
     }
-
     const result = await ImagePicker.launchImageLibraryAsync({
       allowsEditing: true,
       quality: 0.8,
     });
-
     if (!result.canceled && result.assets[0].uri) {
       onSelectFile(result.assets[0].uri, 'image/jpeg');
     }
   };
 
   const handleLoadTestData = async () => {
-    // In a real device, we might need to bundle this or use a specific dev path
-    // For now, we attempt to load the file from the project structure if in dev
     try {
       const testFilePath = `${FileSystem.documentDirectory}test-statement.pdf`;
-      // This is a placeholder logic for the demo/dev purposes
-      // In a real dev env, we might use a hardcoded URI that points to the local tests folder
-      // or a pre-downloaded asset.
       onSelectFile(testFilePath, 'application/pdf');
     } catch (e) {
       Alert.alert('Dev Error', 'Test file not found in document directory.');
@@ -76,69 +66,89 @@ export const MagicScanWindow = ({ visible, onClose, onSelectFile }: MagicScanWin
     <Modal visible={visible} transparent animationType="fade">
       <View className="flex-1 justify-center items-center px-6">
         <BlurView intensity={90} tint="dark" className="absolute inset-0" />
-        
-        <View className="bg-white dark:bg-[#111116] w-full rounded-[32px] p-8 border border-white/20 shadow-2xl">
-          <View className="flex-row justify-between items-center mb-8">
+
+        <View
+          className="bg-surface-1 w-full rounded-[32px] p-7 border border-hairline"
+          style={{ boxShadow: '0 12px 36px rgba(0, 0, 0, 0.4)' }}>
+          <View className="flex-row justify-between items-center mb-7">
             <View>
-              <Text className="font-jakarta text-gray-400 font-jakarta-bold text-[10px] uppercase tracking-widest mb-1">Upload Flow</Text>
-              <Text className="font-jakarta text-gray-900 dark:text-white text-2xl font-jakarta-bold">Magic Scan</Text>
+              <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-1">
+                Upload Flow
+              </Text>
+              <Text className="font-jakarta-bold text-text-high text-2xl">Magic Scan</Text>
             </View>
-            <TouchableOpacity onPress={onClose} className="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 justify-center items-center">
-              <Ionicons name="close" size={24} color="#E0533D" />
-            </TouchableOpacity>
+            <Pressable
+              onPress={onClose}
+              className="w-10 h-10 rounded-full bg-surface-2 border border-hairline justify-center items-center">
+              <Ionicons name="close" size={20} color="#FF6B4A" />
+            </Pressable>
           </View>
 
-          <Text className="font-jakarta text-gray-500 dark:text-gray-400 mb-8 leading-relaxed">
+          <Text className="font-jakarta text-text-mid mb-7 leading-relaxed text-sm">
             Select your source. We primarily support PDF e-statements from all major SG banks.
           </Text>
 
-          <View className="gap-4">
-            <TouchableOpacity 
+          <View className="gap-3">
+            <Pressable
               onPress={handleImportStatement}
-              className="bg-brand-500 p-6 rounded-[24px] flex-row items-center gap-4 shadow-xl shadow-brand-500/30"
-            >
+              className="bg-accent-coral p-5 rounded-[24px] flex-row items-center gap-4"
+              style={{ boxShadow: '0 0 24px rgba(255, 107, 74, 0.45)' }}>
               <View className="w-12 h-12 bg-white/20 rounded-full justify-center items-center">
-                <Ionicons name="document-text" size={24} color="#fff" />
+                <Ionicons name="document-text" size={22} color="#fff" />
               </View>
               <View>
-                <Text className="font-jakarta text-white font-jakarta-bold text-lg">Import E-Statement</Text>
-                <Text className="font-jakarta text-white/70 text-xs">PDF Files • Batch Processing</Text>
+                <Text className="font-jakarta-bold text-white text-base">
+                  Import E-Statement
+                </Text>
+                <Text className="font-jakarta text-white/70 text-xs">
+                  PDF Files • Batch Processing
+                </Text>
               </View>
-            </TouchableOpacity>
+            </Pressable>
 
-            <TouchableOpacity 
+            <Pressable
               onPress={handleScanReceipt}
-              className="bg-gray-50 dark:bg-white/5 p-6 rounded-[24px] flex-row items-center gap-4 border border-white/10"
-            >
-              <View className="w-12 h-12 bg-brand-500/10 rounded-full justify-center items-center">
-                <Ionicons name="camera" size={24} color="#E0533D" />
+              className="bg-surface-2 p-5 rounded-[24px] flex-row items-center gap-4 border border-hairline">
+              <View
+                className="w-12 h-12 rounded-full justify-center items-center"
+                style={{ backgroundColor: 'rgba(255, 107, 74, 0.15)' }}>
+                <Ionicons name="camera" size={22} color="#FF6B4A" />
               </View>
               <View>
-                <Text className="font-jakarta text-gray-900 dark:text-white font-jakarta-bold text-lg">Scan Receipt</Text>
-                <Text className="font-jakarta text-gray-400 text-xs">Camera • Instant Capture</Text>
+                <Text className="font-jakarta-bold text-text-high text-base">Scan Receipt</Text>
+                <Text className="font-jakarta text-text-low text-xs">
+                  Camera • Instant Capture
+                </Text>
               </View>
-            </TouchableOpacity>
+            </Pressable>
 
-            <TouchableOpacity 
+            <Pressable
               onPress={handleUploadPhoto}
-              className="bg-gray-50 dark:bg-white/5 p-6 rounded-[24px] flex-row items-center gap-4 border border-white/10"
-            >
-              <View className="w-12 h-12 bg-brand-500/10 rounded-full justify-center items-center">
-                <Ionicons name="image" size={24} color="#E0533D" />
+              className="bg-surface-2 p-5 rounded-[24px] flex-row items-center gap-4 border border-hairline">
+              <View
+                className="w-12 h-12 rounded-full justify-center items-center"
+                style={{ backgroundColor: 'rgba(255, 107, 74, 0.15)' }}>
+                <Ionicons name="image" size={22} color="#FF6B4A" />
               </View>
               <View>
-                <Text className="font-jakarta text-gray-900 dark:text-white font-jakarta-bold text-lg">Upload Photo</Text>
-                <Text className="font-jakarta text-gray-400 text-xs">Gallery • PNG/JPEG</Text>
+                <Text className="font-jakarta-bold text-text-high text-base">Upload Photo</Text>
+                <Text className="font-jakarta text-text-low text-xs">Gallery • PNG/JPEG</Text>
               </View>
-            </TouchableOpacity>
+            </Pressable>
 
             {__DEV__ && (
-              <TouchableOpacity 
+              <Pressable
                 onPress={handleLoadTestData}
-                className="mt-4 p-4 rounded-[20px] border border-dashed border-gray-300 dark:border-gray-700 items-center"
-              >
-                <Text className="font-jakarta text-gray-400 font-jakarta-bold text-[10px] uppercase tracking-widest">Dev: Load Test Data</Text>
-              </TouchableOpacity>
+                className="mt-3 p-4 rounded-[20px] items-center"
+                style={{
+                  borderStyle: 'dashed',
+                  borderWidth: 1.5,
+                  borderColor: themeColors.textDim,
+                }}>
+                <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest">
+                  Dev: Load Test Data
+                </Text>
+              </Pressable>
             )}
           </View>
         </View>

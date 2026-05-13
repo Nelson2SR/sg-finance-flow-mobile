@@ -1,87 +1,106 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, TextInput, Modal, KeyboardAvoidingView, Platform, Dimensions } from 'react-native';
+import { View, Text, Pressable, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFinanceStore } from '../../store/useFinanceStore';
+import { useThemeColors } from '../../hooks/use-theme-colors';
 
 interface Props {
   visible: boolean;
   onClose: () => void;
 }
 
+type VaultType = 'PERSONAL' | 'TRIP' | 'FAMILY' | 'CRYPTO';
+
+const TYPES: { id: VaultType; label: string; icon: keyof typeof Ionicons.glyphMap; tint: string }[] = [
+  { id: 'PERSONAL', label: 'Bank', icon: 'card', tint: '#FF6B4A' },
+  { id: 'TRIP', label: 'Trip', icon: 'airplane', tint: '#FF5C7C' },
+  { id: 'FAMILY', label: 'Family', icon: 'people', tint: '#5BE0B0' },
+  { id: 'CRYPTO', label: 'Crypto', icon: 'logo-bitcoin', tint: '#FFB547' },
+];
+
 export const CreateVaultModal = ({ visible, onClose }: Props) => {
+  const themeColors = useThemeColors();
   const addWallet = useFinanceStore(s => s.addWallet);
-  
+
   const [name, setName] = useState('');
-  const [type, setType] = useState<'PERSONAL' | 'TRIP' | 'FAMILY' | 'CRYPTO'>('PERSONAL');
-  const [currency, setCurrency] = useState('SGD');
+  const [type, setType] = useState<VaultType>('PERSONAL');
+  const [currency] = useState('SGD');
+  const [nameFocused, setNameFocused] = useState(false);
 
   const handleSave = () => {
     if (!name.trim()) return;
-    
-    addWallet({
-        name: name,
-        type: type,
-        currency: currency,
-        balance: 0
-    });
-    
+    addWallet({ name, type, currency, balance: 0 });
     setName('');
     setType('PERSONAL');
     onClose();
   };
 
-  const types: {id: typeof type, label: string, icon: any, color: string}[] = [
-      { id: 'PERSONAL', label: 'Bank', icon: 'card', color: 'text-brand-500' },
-      { id: 'TRIP', label: 'Trip', icon: 'airplane', color: 'text-rose-500' },
-      { id: 'FAMILY', label: 'Family', icon: 'people', color: 'text-emerald-500' },
-      { id: 'CRYPTO', label: 'Crypto', icon: 'logo-bitcoin', color: 'text-amber-500' }
-  ];
+  const isValid = name.trim().length > 0;
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        className="flex-1 justify-end bg-black/40 dark:bg-black/80"
-      >
-        <View className="bg-white dark:bg-[#0a0a0f] rounded-t-[40px] px-6 pt-6 pb-12 border-t border-gray-200 dark:border-gray-900 shadow-2xl">
+        className="flex-1 justify-end bg-black/40">
+        <View
+          className="bg-surface-1 rounded-t-[40px] px-6 pt-6 pb-12"
+          style={{ borderTopWidth: 1, borderTopColor: themeColors.hairline }}>
           <View className="flex-row justify-between items-center mb-8">
-             <Text className="font-jakarta text-gray-900 dark:text-white text-2xl font-jakarta-bold">New Vault</Text>
-             <TouchableOpacity onPress={onClose} className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-900 justify-center items-center">
-               <Ionicons name="close" size={20} className="color-gray-500 dark:color-gray-400" />
-             </TouchableOpacity>
+            <Text className="font-jakarta-bold text-text-high text-2xl">New Vault</Text>
+            <Pressable
+              onPress={onClose}
+              className="w-9 h-9 rounded-full bg-surface-2 border border-hairline justify-center items-center">
+              <Ionicons name="close" size={18} color={themeColors.textMid} />
+            </Pressable>
           </View>
 
-          {/* Form Field */}
-          <Text className="font-jakarta text-xs font-jakarta-bold uppercase tracking-widest text-gray-500 mb-2">Vault Name</Text>
-          <TextInput 
-             className="bg-gray-50 dark:bg-[#111116] border border-gray-200 dark:border-gray-900 text-gray-900 dark:text-white text-lg font-jakarta-bold rounded-2xl p-4 mb-6"
-             placeholder="e.g. UOB Checking account"
-             placeholderTextColor="#9ca3af"
-             value={name}
-             onChangeText={setName}
-             autoFocus
+          <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-2">
+            Vault Name
+          </Text>
+          <TextInput
+            className={`bg-surface-2 px-4 py-4 rounded-2xl text-text-high text-base font-jakarta-bold mb-6 border ${nameFocused ? 'border-accent-coral' : 'border-hairline'}`}
+            placeholder="e.g. UOB Checking account"
+            placeholderTextColor={themeColors.textDim}
+            value={name}
+            onChangeText={setName}
+            onFocus={() => setNameFocused(true)}
+            onBlur={() => setNameFocused(false)}
+            autoFocus
           />
 
-          <Text className="font-jakarta text-xs font-jakarta-bold uppercase tracking-widest text-gray-500 mb-2">Vault Type Context</Text>
+          <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-2">
+            Vault Type
+          </Text>
           <View className="flex-row flex-wrap gap-3 mb-10">
-              {types.map(t => (
-                  <TouchableOpacity 
-                     key={t.id} 
-                     onPress={() => setType(t.id)}
-                     className={`px-4 py-3 rounded-2xl flex-row items-center gap-2 border ${type === t.id ? 'bg-gray-100 dark:bg-gray-900 border-gray-300 dark:border-gray-700' : 'bg-transparent border-gray-200 dark:border-gray-900'}`}
-                  >
-                     <Ionicons name={t.icon} size={18} className={t.color} />
-                     <Text className={`font-jakarta-bold ${type === t.id ? 'text-gray-900 dark:text-white' : 'text-gray-500'}`}>{t.label}</Text>
-                  </TouchableOpacity>
-              ))}
+            {TYPES.map(t => {
+              const selected = type === t.id;
+              return (
+                <Pressable
+                  key={t.id}
+                  onPress={() => setType(t.id)}
+                  className={`px-4 py-3 rounded-2xl flex-row items-center gap-2 border ${
+                    selected ? 'bg-surface-3 border-accent-coral' : 'bg-surface-2 border-hairline'
+                  }`}>
+                  <Ionicons name={t.icon} size={16} color={t.tint} />
+                  <Text
+                    className={`font-jakarta-bold text-sm ${selected ? 'text-text-high' : 'text-text-mid'}`}>
+                    {t.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
 
-          <TouchableOpacity 
+          <Pressable
             onPress={handleSave}
-            className={`py-4 rounded-full items-center active:scale-95 ${name.trim() ? 'bg-brand-500 shadow-xl shadow-brand-500/30' : 'bg-gray-200 dark:bg-gray-900'}`}
-          >
-             <Text className={`font-jakarta-bold text-lg ${name.trim() ? 'text-white' : 'text-gray-400 dark:text-gray-600'}`}>Provision Vault</Text>
-          </TouchableOpacity>
+            disabled={!isValid}
+            style={isValid ? { boxShadow: '0 0 24px rgba(255, 107, 74, 0.45)' } : null}
+            className={`py-4 rounded-full items-center active:scale-95 ${isValid ? 'bg-accent-coral' : 'bg-surface-3'}`}>
+            <Text
+              className={`font-jakarta-bold text-base ${isValid ? 'text-white' : 'text-text-low'}`}>
+              Provision Vault
+            </Text>
+          </Pressable>
         </View>
       </KeyboardAvoidingView>
     </Modal>

@@ -45,3 +45,6 @@ app-example
 # generated native folders
 /ios
 /android
+
+# Claude Code session state — never commit
+.claude/

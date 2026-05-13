@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 
+export type CopilotPersona = 'advisor' | 'friend';
+
 export interface WidgetPayload {
   type: 'TRANSFER_CONFIRM' | 'BUDGET_ADJUST';
   amount: number;
@@ -13,40 +15,98 @@ export interface ChatMessage {
   sender: 'user' | 'bot';
   text: string;
   timestamp: Date;
-  widget?: WidgetPayload; // If the bot proposes an actionable UI widget
+  /**
+   * The persona that authored this message. Bot bubbles use it to pick
+   * their avatar + bubble tint. User bubbles are coral regardless — we
+   * stamp the active "primary" persona here for analytics symmetry.
+   */
+  persona: CopilotPersona;
+  widget?: WidgetPayload;
 }
 
 interface CopilotState {
   messages: ChatMessage[];
   isTyping: boolean;
-  addMessage: (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
+  /**
+   * Personas the user has invited into the chat. All enabled personas
+   * reply to each user message in the same thread — this is a group
+   * chat, not separate channels. `advisor` is on by default; the user
+   * adds/removes personas from Settings.
+   */
+  enabledPersonas: CopilotPersona[];
+  addMessage: (
+    msg: Omit<ChatMessage, 'id' | 'timestamp' | 'persona'> & { persona?: CopilotPersona },
+  ) => void;
   setTyping: (status: boolean) => void;
+  togglePersona: (persona: CopilotPersona) => void;
   clearChat: () => void;
 }
 
-export const useCopilotStore = create<CopilotState>((set) => ({
-  messages: [
-    {
-      id: 'welcome',
-      sender: 'bot',
-      text: 'Hello! I noticed you have been spending 20% more on Transport this week. Would you like me to analyze your Grab receipts?',
-      timestamp: new Date()
-    }
-  ],
+const WELCOME: Record<CopilotPersona, string> = {
+  advisor:
+    'Hello! I noticed your Transport spend is up 20% this week. Want me to break down your Grab receipts?',
+  friend:
+    "Hey — I'm here whenever you want to talk. Money stuff, day stuff, anything. No pressure.",
+};
+
+const seedMessage = (persona: CopilotPersona): ChatMessage => ({
+  id: `welcome:${persona}`,
+  sender: 'bot',
+  persona,
+  text: WELCOME[persona],
+  timestamp: new Date(),
+});
+
+const nextId = () =>
+  Date.now().toString() + Math.random().toString(36).slice(2, 6);
+
+export const useCopilotStore = create<CopilotState>(set => ({
+  messages: [seedMessage('advisor')],
   isTyping: false,
+  enabledPersonas: ['advisor'],
 
-  addMessage: (msg) => set((state) => ({
-    messages: [...state.messages, { ...msg, id: Date.now().toString(), timestamp: new Date() }]
-  })),
+  addMessage: msg =>
+    set(state => ({
+      messages: [
+        ...state.messages,
+        {
+          ...msg,
+          id: nextId(),
+          timestamp: new Date(),
+          // Default to the first enabled persona (advisor by default).
+          // Callers that care about which persona authored — bot replies —
+          // pass it explicitly.
+          persona: msg.persona ?? state.enabledPersonas[0] ?? 'advisor',
+        },
+      ],
+    })),
 
-  setTyping: (status) => set({ isTyping: status }),
+  setTyping: status => set({ isTyping: status }),
 
-  clearChat: () => set({ 
-    messages: [{
-      id: 'welcome:reset',
-      sender: 'bot',
-      text: 'Memory cleared. How can I help you manage your finances today?',
-      timestamp: new Date()
-    }] 
-  })
+  togglePersona: persona =>
+    set(state => {
+      const present = state.enabledPersonas.includes(persona);
+      if (present) {
+        // Don't allow removing the last persona — without one the chat
+        // has no one to reply.
+        if (state.enabledPersonas.length === 1) return state;
+        return {
+          enabledPersonas: state.enabledPersonas.filter(p => p !== persona),
+        };
+      }
+      // Adding a persona — also drop their welcome message so the user
+      // sees the new voice introduce itself.
+      return {
+        enabledPersonas: [...state.enabledPersonas, persona],
+        messages: [
+          ...state.messages,
+          { ...seedMessage(persona), id: `welcome:${persona}:${nextId()}` },
+        ],
+      };
+    }),
+
+  clearChat: () =>
+    set(state => ({
+      messages: state.enabledPersonas.map(seedMessage),
+    })),
 }));
