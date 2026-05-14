@@ -1,7 +1,13 @@
-import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
 import { API_CONFIG } from '../constants/Config';
+import {
+  clearTokens,
+  getAccessToken,
+  getRefreshToken,
+  setTokens,
+} from '../lib/secureStore';
+import { refreshSession } from './authService';
 
 const BASE_URL = API_CONFIG.BASE_URL;
 
@@ -12,14 +18,92 @@ export const apiClient = axios.create({
   },
 });
 
-// Interceptor to inject JWT token
+// ── Token injection ──────────────────────────────────────────────────────
 apiClient.interceptors.request.use(async (config) => {
-  const token = await SecureStore.getItemAsync('userToken');
+  const token = await getAccessToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
+
+/**
+ * 401-driven refresh with single-flight queueing.
+ *
+ * Multiple parallel requests that all 401 race naturally — we want
+ * exactly ONE /auth/refresh call to fire and the rest to wait on its
+ * result. `refreshPromise` is that single in-flight refresh; any
+ * subsequent 401 retries return its (cached) outcome.
+ *
+ * On refresh failure, tokens are cleared and the original 401 bubbles
+ * up — the AuthContext's effect picks that up and routes back to /login.
+ *
+ * Callbacks registered via `onAuthFailed` fire when the refresh path
+ * gives up; AuthContext uses this to drop in-memory user state.
+ */
+type RetryConfig = InternalAxiosRequestConfig & { _isAuthRetry?: boolean };
+
+let refreshPromise: Promise<string | null> | null = null;
+const authFailedListeners = new Set<() => void>();
+
+export function onAuthFailed(listener: () => void): () => void {
+  authFailedListeners.add(listener);
+  return () => authFailedListeners.delete(listener);
+}
+
+async function doRefresh(): Promise<string | null> {
+  const refreshToken = await getRefreshToken();
+  if (!refreshToken) return null;
+  try {
+    const pair = await refreshSession(refreshToken);
+    await setTokens({
+      accessToken: pair.access_token,
+      refreshToken: pair.refresh_token,
+    });
+    return pair.access_token;
+  } catch {
+    await clearTokens();
+    authFailedListeners.forEach((fn) => fn());
+    return null;
+  }
+}
+
+apiClient.interceptors.response.use(
+  (resp) => resp,
+  async (error: AxiosError) => {
+    const original = error.config as RetryConfig | undefined;
+
+    // Bail unless this is a 401, we have a request to retry, and we
+    // haven't already retried this request once (no infinite loops if
+    // the refreshed token also 401s).
+    if (
+      !original ||
+      original._isAuthRetry ||
+      error.response?.status !== 401
+    ) {
+      throw error;
+    }
+
+    // Never try to refresh the refresh endpoint itself — that path is
+    // 401-on-bad-refresh by design.
+    if (typeof original.url === 'string' && original.url.endsWith('/auth/refresh')) {
+      throw error;
+    }
+
+    if (!refreshPromise) {
+      refreshPromise = doRefresh().finally(() => {
+        refreshPromise = null;
+      });
+    }
+    const newToken = await refreshPromise;
+    if (!newToken) throw error;
+
+    original._isAuthRetry = true;
+    original.headers = original.headers ?? ({} as any);
+    (original.headers as any).Authorization = `Bearer ${newToken}`;
+    return apiClient(original);
+  },
+);
 
 /**
  * Numeric fields coming from the FastAPI backend are Decimal columns,

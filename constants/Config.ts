@@ -15,21 +15,18 @@ export const API_CONFIG = {
   BASE_URL: `http://${LOCAL_IP}:8000/api/v1`,
 };
 
-// Skip the Master Passphrase / vault unlock flow in dev builds.
-// The "master passphrase" is a local-only second-factor stored in
-// SecureStore (iOS Keychain). On first unlock whatever you type becomes
-// the passphrase; subsequent unlocks just compare locally. It is *not*
-// sent to the backend and currently doesn't encrypt anything — it's a
-// placeholder for the eventual E2E-encrypted vault flow. Flip to false
-// to exercise the screen.
-export const DEV_DISABLE_VAULT = __DEV__;
-
-// Skip the username/password login screen entirely in dev. When true,
-// AuthContext auto-seeds DEV_FAKE_TOKEN and AuthGuard lets the user
-// straight into /(tabs) — convenient, but the backend rejects that
-// token with 401, so the Copilot endpoint falls back to canned phrases.
-// Set to `false` to test against the real backend (live Gemini replies).
+// Skip the entire login flow in dev. When true, AuthContext synthesises
+// a fake session so reloads land straight on /(tabs). The backend will
+// reject the dev token with 401, so any endpoint that depends on a real
+// user (Copilot, Magic Scan, transactions) will fall back to canned
+// behaviour.
 export const DEV_DISABLE_AUTH = false;
 
-// Fake token used when DEV_DISABLE_AUTH is on. Anything truthy works.
+// Fake access token used when DEV_DISABLE_AUTH is on. Anything truthy works.
 export const DEV_FAKE_TOKEN = 'dev-bypass-token';
+
+// Pre-fill the OTP screen with the stub provider's fixed code so dev
+// builds against a stub backend skip the manual typing step.
+// See sg_finance_flow/auth/providers/phone.py:StubPhoneProvider.
+export const DEV_PHONE_OTP_BYPASS = __DEV__;
+export const DEV_PHONE_OTP_CODE = '000000';

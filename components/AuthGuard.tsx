@@ -9,9 +9,12 @@ import { useAuth } from '../context/AuthContext';
  * "Couldn't find a navigation context" crash that surfaced wherever React
  * happened to be reconciling at the time (often inside the wallet/filter
  * chips on the Transactions tab).
+ *
+ * After PR-2 there is no separate "vault unlock" gate — successful login
+ * is the only condition for tab access.
  */
 export function useAuthGuard() {
-  const { isAuthenticated, isVaultUnlocked, isLoading } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const navigationState = useRootNavigationState();
@@ -23,14 +26,11 @@ export function useAuthGuard() {
 
     if (!isAuthenticated && !inAuthGroup) {
       router.replace('/login');
-    } else if (isAuthenticated && !isVaultUnlocked && !inAuthGroup) {
-      router.replace('/login');
-    } else if (isAuthenticated && isVaultUnlocked && inAuthGroup) {
+    } else if (isAuthenticated && inAuthGroup) {
       router.replace('/(tabs)');
     }
   }, [
     isAuthenticated,
-    isVaultUnlocked,
     isLoading,
     segments,
     navigationState?.key,

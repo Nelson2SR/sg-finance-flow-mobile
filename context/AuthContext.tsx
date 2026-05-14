@@ -1,113 +1,144 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import * as SecureStore from 'expo-secure-store';
-import * as LocalAuthentication from 'expo-local-authentication';
-import { Alert } from 'react-native';
-import { DEV_DISABLE_AUTH, DEV_DISABLE_VAULT, DEV_FAKE_TOKEN } from '../constants/Config';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+
+import {
+  DEV_DISABLE_AUTH,
+  DEV_FAKE_TOKEN,
+} from '../constants/Config';
+import {
+  clearTokens,
+  getTokens,
+  setTokens,
+} from '../lib/secureStore';
+import { onAuthFailed } from '../services/apiClient';
+import {
+  AuthResponse,
+  AuthUser,
+  logout as logoutEndpoint,
+  refreshSession,
+} from '../services/authService';
 
 interface AuthContextType {
-  token: string | null;
-  masterPassphrase: string | null;
+  user: AuthUser | null;
+  accessToken: string | null;
   isLoading: boolean;
-  login: (token: string, username: string) => Promise<void>;
-  logout: () => Promise<void>;
-  unlockVault: (passphrase: string) => Promise<boolean>;
   isAuthenticated: boolean;
-  isVaultUnlocked: boolean;
+  /** Persist a fresh login pair to secure storage and hydrate context state. */
+  login: (resp: AuthResponse) => Promise<void>;
+  /** Revoke server-side and wipe local tokens. Defaults to single-device logout. */
+  logout: (opts?: { allDevices?: boolean }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const DEV_USER: AuthUser = {
+  id: 0,
+  display_name: 'Dev Bypass',
+  avatar_url: null,
+  email: null,
+};
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [token, setToken] = useState<string | null>(null);
-  const [masterPassphrase, setMasterPassphrase] = useState<string | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [refreshToken, setRefreshToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    loadToken();
+    void hydrate();
+    // The apiClient's response interceptor calls these listeners when a
+    // 401-driven refresh fails (refresh token revoked/expired). We drop
+    // local state so the AuthGuard routes back to /login.
+    const unsub = onAuthFailed(() => {
+      setUser(null);
+      setAccessToken(null);
+      setRefreshToken(null);
+    });
+    return unsub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function loadToken() {
+  async function hydrate() {
     if (DEV_DISABLE_AUTH) {
-      // Dev shortcut: bypass the real login + vault flow entirely so
-      // reloads land straight on /(tabs). Disabled in production via
-      // the __DEV__ gate in Config.ts.
-      setToken(DEV_FAKE_TOKEN);
+      // Dev shortcut. Backend rejects the fake token with 401 — see
+      // Config.ts for caveats.
+      setUser(DEV_USER);
+      setAccessToken(DEV_FAKE_TOKEN);
       setIsLoading(false);
       return;
     }
+
     try {
-      const savedToken = await SecureStore.getItemAsync('userToken');
-      if (savedToken) {
-        setToken(savedToken);
+      const pair = await getTokens();
+      if (!pair) {
+        setIsLoading(false);
+        return;
       }
-    } catch (e) {
-      console.error('Failed to load token', e);
+
+      // Try to refresh on cold launch — this rotates the long-lived
+      // refresh token AND gives us a fresh 1h access token, so the
+      // user doesn't immediately hit a 401 on their first request.
+      try {
+        const fresh = await refreshSession(pair.refreshToken);
+        await setTokens({
+          accessToken: fresh.access_token,
+          refreshToken: fresh.refresh_token,
+        });
+        setUser(fresh.user);
+        setAccessToken(fresh.access_token);
+        setRefreshToken(fresh.refresh_token);
+      } catch {
+        // Refresh token is dead — wipe and drop to /login.
+        await clearTokens();
+      }
+    } catch (err) {
+      console.warn('[Auth] hydrate failed', err);
     } finally {
       setIsLoading(false);
     }
   }
 
-  const login = async (newToken: string, username: string) => {
-    await SecureStore.setItemAsync('userToken', newToken);
-    await SecureStore.setItemAsync('username', username);
-    setToken(newToken);
+  const login = async (resp: AuthResponse) => {
+    await setTokens({
+      accessToken: resp.access_token,
+      refreshToken: resp.refresh_token,
+    });
+    setUser(resp.user);
+    setAccessToken(resp.access_token);
+    setRefreshToken(resp.refresh_token);
   };
 
-  const logout = async () => {
-    await SecureStore.deleteItemAsync('userToken');
-    await SecureStore.deleteItemAsync('masterPassphrase');
-    setToken(null);
-    setMasterPassphrase(null);
-  };
-
-  const unlockVault = async (passphrase: string): Promise<boolean> => {
-    // In a real app, we'd verify this with the backend or a local hash
-    // For now, we'll store it securely if it's the first time, or verify it
-    try {
-      const savedPass = await SecureStore.getItemAsync('masterPassphrase');
-      console.log('--- Vault Unlock Attempt ---');
-      console.log('Saved Passphrase Exists:', !!savedPass);
-      
-      if (!savedPass) {
-        console.log('First time setup - saving new passphrase');
-        await SecureStore.setItemAsync('masterPassphrase', passphrase);
-        setMasterPassphrase(passphrase);
-        return true;
-      }
-
-      if (savedPass === passphrase) {
-        console.log('Unlock successful');
-        setMasterPassphrase(passphrase);
-        return true;
-      } else {
-        console.log('Unlock failed - mismatch');
-        Alert.alert('Error', 'Incorrect Master Passphrase');
-        return false;
-      }
-
-    } catch (e) {
-      return false;
+  const logout = async (opts?: { allDevices?: boolean }) => {
+    if (refreshToken) {
+      await logoutEndpoint(
+        refreshToken,
+        opts?.allDevices ? accessToken ?? undefined : undefined,
+      );
     }
+    await clearTokens();
+    setUser(null);
+    setAccessToken(null);
+    setRefreshToken(null);
   };
 
-  const value = {
-    token,
-    masterPassphrase,
-    isLoading,
-    login,
-    logout,
-    unlockVault,
-    isAuthenticated: !!token,
-    isVaultUnlocked: DEV_DISABLE_VAULT ? !!token : !!masterPassphrase,
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        accessToken,
+        isLoading,
+        isAuthenticated: !!accessToken,
+        login,
+        logout,
+      }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
+  const ctx = useContext(AuthContext);
+  if (ctx === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
-  return context;
+  return ctx;
 };

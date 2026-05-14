@@ -1,52 +1,107 @@
-import axios from 'axios';
-import { authService } from '../../services/authService';
+/**
+ * Coverage for the passwordless authService — WeChat OAuth + Phone OTP.
+ *
+ * Tests confirm the HTTP shape we send to the backend matches the
+ * contract in sg_finance_flow/api/routes/auth_v2.py, and that logout
+ * is best-effort (never throws upward) so the UI can always clear
+ * local state.
+ */
 
-jest.mock('axios');
-jest.mock('react-native', () => ({
-  Platform: { OS: 'ios' }
+jest.mock('axios', () => ({ post: jest.fn() }));
+
+jest.mock('../../constants/Config', () => ({
+  API_CONFIG: { BASE_URL: 'http://localhost:8000/api/v1' },
 }));
+
+import axios from 'axios';
+import {
+  loginWithWeChat,
+  logout,
+  refreshSession,
+  requestPhoneOtp,
+  verifyPhoneOtp,
+} from '../../services/authService';
 
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
+const sampleAuthResponse = {
+  access_token: 'a',
+  refresh_token: 'r',
+  token_type: 'bearer',
+  user: { id: 1, display_name: 'Su Rong', avatar_url: null, email: null },
+};
 
-describe('authService TDD', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
+beforeEach(() => jest.clearAllMocks());
 
-  it('successfully logs in and returns access token', async () => {
-    const mockResponse = {
-      data: { access_token: 'fake_token', token_type: 'bearer' }
-    };
-    mockedAxios.post.mockResolvedValue(mockResponse);
-
-    const result = await authService.login('user', 'pass');
-
+describe('loginWithWeChat', () => {
+  it('POSTs the code to /auth/oauth/wechat and returns the body', async () => {
+    mockedAxios.post.mockResolvedValueOnce({ data: sampleAuthResponse });
+    const got = await loginWithWeChat('dev-alice');
     expect(mockedAxios.post).toHaveBeenCalledWith(
-      expect.stringContaining('/auth/login'),
-      expect.any(FormData)
+      'http://localhost:8000/api/v1/auth/oauth/wechat',
+      { code: 'dev-alice' },
     );
-    expect(result.access_token).toBe('fake_token');
+    expect(got).toEqual(sampleAuthResponse);
   });
+});
 
-  it('successfully registers a new user', async () => {
-    mockedAxios.post.mockResolvedValue({ data: { message: 'User created' } });
-
-    const result = await authService.register('newuser', 'newpass');
-
+describe('requestPhoneOtp', () => {
+  it('POSTs the phone to /auth/phone/request', async () => {
+    mockedAxios.post.mockResolvedValueOnce({ data: { status: 'sent' } });
+    await requestPhoneOtp('+6591234567');
     expect(mockedAxios.post).toHaveBeenCalledWith(
-      expect.stringContaining('/auth/register'),
-      null,
-      expect.objectContaining({
-        params: { username: 'newuser', password: 'newpass' }
-      })
+      'http://localhost:8000/api/v1/auth/phone/request',
+      { phone: '+6591234567' },
     );
-    expect(result.message).toBe('User created');
+  });
+});
+
+describe('verifyPhoneOtp', () => {
+  it('POSTs phone + otp to /auth/phone/verify', async () => {
+    mockedAxios.post.mockResolvedValueOnce({ data: sampleAuthResponse });
+    const got = await verifyPhoneOtp('+6591234567', '000000');
+    expect(mockedAxios.post).toHaveBeenCalledWith(
+      'http://localhost:8000/api/v1/auth/phone/verify',
+      { phone: '+6591234567', otp: '000000' },
+    );
+    expect(got.user.id).toBe(1);
+  });
+});
+
+describe('refreshSession', () => {
+  it('POSTs refresh_token to /auth/refresh', async () => {
+    mockedAxios.post.mockResolvedValueOnce({ data: sampleAuthResponse });
+    await refreshSession('old-refresh');
+    expect(mockedAxios.post).toHaveBeenCalledWith(
+      'http://localhost:8000/api/v1/auth/refresh',
+      { refresh_token: 'old-refresh' },
+    );
+  });
+});
+
+describe('logout', () => {
+  it('POSTs refresh_token to /auth/logout without auth header by default', async () => {
+    mockedAxios.post.mockResolvedValueOnce({ data: undefined });
+    await logout('r1');
+    expect(mockedAxios.post).toHaveBeenCalledWith(
+      'http://localhost:8000/api/v1/auth/logout',
+      { refresh_token: 'r1' },
+    );
   });
 
-  it('throws error on login failure', async () => {
-    mockedAxios.post.mockRejectedValue(new Error('Unauthorized'));
+  it('includes the Bearer header when accessToken is supplied (revoke-all path)', async () => {
+    mockedAxios.post.mockResolvedValueOnce({ data: undefined });
+    await logout('r1', 'a1');
+    expect(mockedAxios.post).toHaveBeenCalledWith(
+      'http://localhost:8000/api/v1/auth/logout',
+      { refresh_token: 'r1' },
+      { headers: { Authorization: 'Bearer a1' } },
+    );
+  });
 
-    await expect(authService.login('bad', 'pass')).rejects.toThrow('Unauthorized');
+  it('swallows network errors — logout must be best-effort for the UI', async () => {
+    mockedAxios.post.mockRejectedValueOnce(new Error('boom'));
+    // Must NOT throw — UI relies on this to always clear local state.
+    await expect(logout('r1')).resolves.toBeUndefined();
   });
 });

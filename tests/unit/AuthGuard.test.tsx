@@ -1,5 +1,5 @@
 /**
- * Regression tests for the vault-unlock redirect.
+ * Regression tests for the auth redirect flow.
  *
  * The bug we're guarding against: the original guard called router.replace()
  * before the root navigator had finished mounting. The redirect raced with
@@ -9,12 +9,13 @@
  *
  * The hook now waits on useRootNavigationState().key, and these tests pin
  * that contract so the regression can't return silently.
+ *
+ * Post-PR-2 the only gate is `isAuthenticated` — the separate
+ * `isVaultUnlocked` state is gone with the vault passphrase.
  */
 
 import { renderHook } from '@testing-library/react-native';
 
-// Jest hoists jest.mock() factories above imports; references must be
-// prefixed with `mock` to escape the out-of-scope-variables guard.
 const mockReplace = jest.fn();
 const mockRouterState = {
   segments: ['login'] as string[],
@@ -22,7 +23,6 @@ const mockRouterState = {
 };
 const mockAuthState = {
   isAuthenticated: false,
-  isVaultUnlocked: false,
   isLoading: false,
 };
 
@@ -43,7 +43,6 @@ const resetState = () => {
   mockRouterState.segments = ['login'];
   mockRouterState.navigationKey = 'stack-key';
   mockAuthState.isAuthenticated = false;
-  mockAuthState.isVaultUnlocked = false;
   mockAuthState.isLoading = false;
 };
 
@@ -77,30 +76,18 @@ describe('useAuthGuard redirect flow', () => {
     expect(mockReplace).toHaveBeenCalledWith('/login');
   });
 
-  it('keeps an authenticated-but-locked user on /login', () => {
-    mockRouterState.segments = ['(tabs)'];
-    mockAuthState.isAuthenticated = true;
-    mockAuthState.isVaultUnlocked = false;
-
-    renderHook(() => useAuthGuard());
-
-    expect(mockReplace).toHaveBeenCalledWith('/login');
-  });
-
-  it('redirects an unlocked user from /login into /(tabs)', () => {
+  it('redirects an authenticated user from /login into /(tabs)', () => {
     mockRouterState.segments = ['login'];
     mockAuthState.isAuthenticated = true;
-    mockAuthState.isVaultUnlocked = true;
 
     renderHook(() => useAuthGuard());
 
     expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
   });
 
-  it('does not redirect an unlocked user who is already inside /(tabs)', () => {
+  it('does not redirect an authenticated user who is already inside /(tabs)', () => {
     mockRouterState.segments = ['(tabs)'];
     mockAuthState.isAuthenticated = true;
-    mockAuthState.isVaultUnlocked = true;
 
     renderHook(() => useAuthGuard());
 
