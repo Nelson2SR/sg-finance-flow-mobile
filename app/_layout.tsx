@@ -99,6 +99,7 @@ function RootLayoutNav() {
             each screen renders its own back arrow + title row. */}
         <Stack.Screen name="categories" options={{ headerShown: false }} />
         <Stack.Screen name="labels" options={{ headerShown: false }} />
+        <Stack.Screen name="privacy" options={{ headerShown: false }} />
       </Stack>
       <AuthGuard />
       <StatusBar style={isDark ? 'light' : 'dark'} />

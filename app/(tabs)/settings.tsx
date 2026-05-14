@@ -266,6 +266,32 @@ export default function SettingsScreen() {
           </Pressable>
         </GradientCard>
 
+        {/* ── Privacy ──────────────────────────────────────────────────
+            Manage on-device bank PDF passwords — see PRD 09 §4.4 / the
+            Zero Cloud Lock-in commitment in CLAUDE.md. */}
+        <Text className="font-jakarta-bold text-text-high text-xl mb-1">Privacy</Text>
+        <Text className="font-jakarta text-text-low text-xs mb-5 leading-relaxed">
+          Bank PDF passwords are kept in your iOS Keychain on this device. We never
+          store them on our servers.
+        </Text>
+        <GradientCard padding="none" className="mb-8 overflow-hidden">
+          <Pressable
+            onPress={() => router.push('/privacy')}
+            className="flex-row justify-between items-center p-5 active:bg-surface-3">
+            <View className="flex-row items-center gap-4">
+              <View
+                className="w-9 h-9 rounded-2xl justify-center items-center"
+                style={{ backgroundColor: 'rgba(167, 139, 250, 0.15)' }}>
+                <Ionicons name="lock-closed" size={14} color="#A78BFA" />
+              </View>
+              <Text className="font-jakarta-bold text-text-high text-sm">
+                Bank passwords
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={14} color={themeColors.textLow} />
+          </Pressable>
+        </GradientCard>
+
         <Text className="font-jakarta-bold text-text-high text-xl mb-1">Copilot Personas</Text>
         <Text className="font-jakarta text-text-low text-xs mb-5 leading-relaxed">
           Enable the voices that join your chat. Selected personas reply in the same thread —

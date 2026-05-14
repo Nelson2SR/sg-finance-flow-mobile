@@ -4,6 +4,7 @@ import {
   DEV_DISABLE_AUTH,
   DEV_FAKE_TOKEN,
 } from '../constants/Config';
+import { forgetAllBankPasswords } from '../lib/bankPasswords';
 import {
   clearTokens,
   getTokens,
@@ -113,6 +114,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         refreshToken,
         opts?.allDevices ? accessToken ?? undefined : undefined,
       );
+    }
+    // Belt-and-braces privacy hygiene: a "log out everywhere" should
+    // also drop the on-device bank PDF password cache for this user.
+    // Single-device logout keeps the cache so re-logging-in on the
+    // same device doesn't re-prompt for every saved bank.
+    if (opts?.allDevices && user?.id) {
+      await forgetAllBankPasswords(user.id);
     }
     await clearTokens();
     setUser(null);

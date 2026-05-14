@@ -20,6 +20,7 @@ import { CreateVaultModal } from '../../components/features/CreateVaultModal';
 import { TrendChart } from '../../components/features/TrendChart';
 import { MagicScanWindow } from '../../components/features/MagicScanWindow';
 import { scanDocumentWithGemini, ScanResponse, ScannedTransaction, ScanTaxonomy } from '../../services/geminiService';
+import { parsePdfWithPasswordFlow } from '../../services/uploadService';
 import { useCategoriesStore } from '../../store/useCategoriesStore';
 import { MagicScanReviewModal } from '../../components/features/MagicScanModal';
 import { financeApi } from '../../services/apiClient';
@@ -92,7 +93,7 @@ export default function HomeScreen() {
   const setActiveWallet = useFinanceStore(s => s.setActiveWallet);
   const addTransactionsBatch = useFinanceStore(s => s.addTransactionsBatch);
   const syncData = useFinanceStore(s => s.syncData);
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
 
   React.useEffect(() => {
     // Skip the backend sync while the dev auth bypass is on — the seeded
@@ -127,9 +128,24 @@ export default function HomeScreen() {
     setScanWindowVisible(false);
     setScanModalVisible(true);
     setIsScanning(true);
-    const data = await scanDocumentWithGemini(uri, mimeType, buildScanTaxonomy());
-    setIsScanning(false);
-    setScanResult(data);
+
+    try {
+      let data: ScanResponse | null;
+      if (mimeType === 'application/pdf' && user?.id) {
+        // PDFs route through the backend so encrypted statements can
+        // be decrypted with pikepdf using a password stored only on
+        // this device. See services/uploadService.ts.
+        data = await parsePdfWithPasswordFlow(uri, user.id);
+      } else {
+        data = await scanDocumentWithGemini(uri, mimeType, buildScanTaxonomy());
+      }
+      setScanResult(data);
+    } catch (err) {
+      console.warn('[MagicScan] parse failed', err);
+      setScanResult(null);
+    } finally {
+      setIsScanning(false);
+    }
   };
 
   const confirmScan = async (scannedTransactions: ScannedTransaction[]) => {
