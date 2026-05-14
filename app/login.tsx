@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   Alert,
+  Platform,
   Pressable,
   Text,
   TextInput,
@@ -12,6 +13,7 @@ import { useRouter } from 'expo-router';
 
 import { Surface, GradientCard, NeonButton } from '../components/ui';
 import {
+  API_CONFIG,
   DEV_PHONE_OTP_BYPASS,
   DEV_PHONE_OTP_CODE,
 } from '../constants/Config';
@@ -26,6 +28,28 @@ import {
 type Step = 'landing' | 'phone' | 'otp';
 
 const E164_RE = /^\+[1-9]\d{6,14}$/;
+
+/**
+ * Translate an axios error into a human message. The most common failure
+ * mode in dev is "backend is running but doesn't have the route yet"
+ * (FastAPI default 404 body `{detail: "Not Found"}`), and the second
+ * most common is "backend unreachable at all" — distinguishing them
+ * saves real debugging time. Falls back to the generic fallback.
+ */
+function describeAuthError(err: any, fallback: string): string {
+  // No HTTP response at all → network reachability.
+  if (!err?.response) {
+    return `Could not reach the API server at ${API_CONFIG.BASE_URL}. Check that it's running and on the same network as this device.`;
+  }
+  const status = err.response.status;
+  const detail = err.response.data?.detail;
+  if (status === 404 && (detail === 'Not Found' || detail === undefined)) {
+    return `The API server is up but doesn't expose this endpoint yet. Restart the backend so it picks up the new auth routes, then try again.`;
+  }
+  if (typeof detail === 'string') return detail;
+  if (detail && typeof detail === 'object' && detail.message) return String(detail.message);
+  return fallback;
+}
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -59,7 +83,7 @@ export default function LoginScreen() {
     } catch (err: any) {
       Alert.alert(
         'WeChat sign-in failed',
-        err.response?.data?.detail ?? 'Please try again or use phone OTP.',
+        describeAuthError(err, 'Please try again or use phone OTP.'),
       );
     } finally {
       setIsBusy(false);
@@ -82,7 +106,7 @@ export default function LoginScreen() {
     } catch (err: any) {
       Alert.alert(
         'Could not send code',
-        err.response?.data?.detail ?? 'Please check the number and try again.',
+        describeAuthError(err, 'Please check the number and try again.'),
       );
     } finally {
       setIsBusy(false);
@@ -103,7 +127,7 @@ export default function LoginScreen() {
     } catch (err: any) {
       Alert.alert(
         'Verification failed',
-        err.response?.data?.detail ?? 'The code may have expired. Send a fresh one.',
+        describeAuthError(err, 'The code may have expired. Send a fresh one.'),
       );
     } finally {
       setIsBusy(false);
@@ -128,9 +152,18 @@ export default function LoginScreen() {
         ? "We'll text you a one-time code."
         : 'Sign in to your private vault.';
 
+  // Web: constrain the form to a typical mobile-card width so the
+  // layout doesn't stretch full-window on desktop browsers. On native,
+  // these classes still resolve but the parent SafeAreaView is already
+  // <420px so they have no visible effect.
+  const innerContainerClass =
+    Platform.OS === 'web'
+      ? 'flex-1 px-6 justify-center w-full max-w-md mx-auto'
+      : 'flex-1 px-6 justify-center';
+
   return (
     <Surface halo>
-      <SafeAreaView className="flex-1 px-6 justify-center">
+      <SafeAreaView className={innerContainerClass}>
         <View className="items-center mb-10">
           <View
             className="w-20 h-20 rounded-[24px] bg-accent-coral justify-center items-center mb-6"
