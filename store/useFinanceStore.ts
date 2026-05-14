@@ -58,6 +58,14 @@ interface FinanceState {
   ) => { added: Transaction[]; skipped: number };
 
   deleteTransaction: (id: string) => void;
+  /**
+   * Patch the labels on an existing local transaction by id. Used by
+   * the Copilot CREATE_TRANSACTION flow to apply LLM-suggested labels
+   * after a successful backend execute — the backend's Transaction
+   * model doesn't yet store labels, so they live only in the local
+   * Zustand store (Phase 1 invariant).
+   */
+  updateTransactionLabels: (id: string, labels: string[]) => void;
   syncData: () => Promise<void>;
   getTotalBalance: () => number;
 }
@@ -199,6 +207,13 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     }
   },
 
+
+  updateTransactionLabels: (id, labels) =>
+    set((state) => ({
+      transactions: state.transactions.map(t =>
+        t.id === id ? { ...t, labels: labels.length > 0 ? labels : undefined } : t,
+      ),
+    })),
 
   deleteTransaction: (id) => set((state) => {
     const tx = state.transactions.find(t => t.id === id);

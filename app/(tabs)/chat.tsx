@@ -19,6 +19,7 @@ import { scanDocumentWithGemini, ScanResponse, ScannedTransaction, ScanTaxonomy 
 import { useCategoriesStore } from '../../store/useCategoriesStore';
 import {
   chatWithCopilot,
+  FinanceTaxonomy,
   executeCopilotAction,
   rollbackCopilotAction,
   FinanceSnapshot,
@@ -81,16 +82,19 @@ export default function ChatCopilotScreen() {
   const transactions = useFinanceStore(s => s.transactions);
   const addTransactionsBatch = useFinanceStore(s => s.addTransactionsBatch);
   // Build the scan taxonomy from the user's Vault Config so Gemini
-  // tags new rows with their configured categories + labels.
+  // tags new rows with their configured categories + labels. The same
+  // shape is used by the Copilot chat call so the LLM grounds its
+  // CREATE_TRANSACTION proposals in the user's actual vocabulary too.
   const allCategories = useCategoriesStore(s => s.categories);
   const allLabels = useCategoriesStore(s => s.labels);
-  const buildScanTaxonomy = (): ScanTaxonomy => ({
+  const buildTaxonomy = (): FinanceTaxonomy & ScanTaxonomy => ({
     expenseCategories: allCategories.filter(c => c.kind === 'expense').map(c => c.name),
     incomeCategories: allCategories.filter(c => c.kind === 'income').map(c => c.name),
     labels: allLabels.map(l => l.name),
   });
   const activeWalletId = useFinanceStore(s => s.activeWalletId);
   const syncData = useFinanceStore(s => s.syncData);
+  const updateTransactionLabels = useFinanceStore(s => s.updateTransactionLabels);
 
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResponse | null>(null);
@@ -151,7 +155,7 @@ export default function ChatCopilotScreen() {
       const minTypingMs = 1000 + Math.random() * 1000;
       const minTyping = new Promise<void>(resolve => setTimeout(resolve, minTypingMs));
       Promise.all([
-        chatWithCopilot({ persona, message: userText, history, snapshot }),
+        chatWithCopilot({ persona, message: userText, history, snapshot, taxonomy: buildTaxonomy() }),
         minTyping,
       ])
         .then(([reply]) => {
@@ -201,6 +205,8 @@ export default function ChatCopilotScreen() {
     // ROLLBACK_ACTION is a special case — it goes to the rollback API
     // rather than executeAction, using action_id from the payload.
     try {
+      let createdLabelsFor: { txId: number; labels: string[] } | null = null;
+
       if (msg.toolCall.type === 'ROLLBACK_ACTION') {
         const targetId = Number(msg.toolCall.payload?.action_id);
         if (!Number.isFinite(targetId)) {
@@ -218,13 +224,35 @@ export default function ChatCopilotScreen() {
           status: 'executed',
           executedActionId: result.id,
         });
+        // If the LLM proposed labels alongside CREATE_TRANSACTION, the
+        // backend ignores them today (no column). Capture the new tx's
+        // backend id from reversal_payload so we can patch labels into
+        // the local store after syncData refreshes from the backend.
+        if (msg.toolCall.type === 'CREATE_TRANSACTION') {
+          const proposedLabels = Array.isArray(msg.toolCall.payload?.labels)
+            ? (msg.toolCall.payload.labels as string[])
+            : [];
+          const newTxId = Number(result.reversal_payload?.transaction_id);
+          if (proposedLabels.length > 0 && Number.isFinite(newTxId)) {
+            createdLabelsFor = { txId: newTxId, labels: proposedLabels };
+          }
+        }
       }
-      // The action mutated server-side data (created / deleted /
-      // updated a transaction). Refresh the local finance store so
-      // Home and Activity reflect the change immediately — without
-      // this the user only sees their new transaction after the next
-      // app reload.
-      void syncData();
+
+      // Refresh the local store from the backend so Home + Activity
+      // reflect the change immediately. We await this (not fire-and-
+      // forget) when we need to patch labels afterwards, so the local
+      // row is in place before we touch it.
+      if (createdLabelsFor) {
+        await syncData();
+        // After syncData, transactions in the local store carry their
+        // backend id as a stringified field. Match by that id and
+        // patch the labels — the backend has no column for them so
+        // this is the only place they live (Phase 1 invariant).
+        updateTransactionLabels(String(createdLabelsFor.txId), createdLabelsFor.labels);
+      } else {
+        void syncData();
+      }
     } catch (err: any) {
       const detail =
         err?.response?.data?.detail || err?.message || 'Action failed. Please try again.';
@@ -275,7 +303,7 @@ export default function ChatCopilotScreen() {
       const data = await scanDocumentWithGemini(
         result.assets[0].uri,
         'image/jpeg',
-        buildScanTaxonomy(),
+        buildTaxonomy(),
       );
       setIsScanning(false);
       setScanResult(data);

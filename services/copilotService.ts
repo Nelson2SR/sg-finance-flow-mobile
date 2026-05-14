@@ -4,6 +4,7 @@ import {
   CopilotActionResponseDto,
   CopilotMessageDto,
   CopilotSnapshotDto,
+  CopilotTaxonomyDto,
   CopilotToolCallDto,
 } from './apiClient';
 
@@ -23,6 +24,17 @@ export interface FinanceSnapshot {
     type: 'INCOME' | 'EXPENSE';
     date: string;
   }[];
+}
+
+/**
+ * The user's configured Vault Config vocabulary. Passed alongside each
+ * chat turn so the LLM grounds CREATE_TRANSACTION proposals in the
+ * user's own categories + labels instead of a generic fallback enum.
+ */
+export interface FinanceTaxonomy {
+  expenseCategories: string[];
+  incomeCategories: string[];
+  labels: string[];
 }
 
 export interface CopilotReply {
@@ -89,6 +101,15 @@ const buildSnapshotWire = (snapshot: FinanceSnapshot): CopilotSnapshotDto => ({
   })),
 });
 
+const buildTaxonomyWire = (taxonomy: FinanceTaxonomy | undefined): CopilotTaxonomyDto | undefined =>
+  taxonomy
+    ? {
+        expense_categories: taxonomy.expenseCategories,
+        income_categories: taxonomy.incomeCategories,
+        labels: taxonomy.labels,
+      }
+    : undefined;
+
 /**
  * Send one user turn to the backend's `/copilot/chat` endpoint as
  * `persona`, with the per-persona-filtered history + finance snapshot.
@@ -100,11 +121,15 @@ export async function chatWithCopilot({
   message,
   history,
   snapshot,
+  taxonomy,
 }: {
   persona: CopilotPersona;
   message: string;
   history: ChatMessage[];
   snapshot: FinanceSnapshot;
+  /** Optional Vault Config vocabulary. Without it the backend tells
+   *  the LLM "use 'Other'" and the user's words don't get cited. */
+  taxonomy?: FinanceTaxonomy;
 }): Promise<CopilotReply> {
   try {
     const res = await copilotApi.chat({
@@ -112,6 +137,7 @@ export async function chatWithCopilot({
       message,
       history: buildHistoryWire(history, persona),
       snapshot: buildSnapshotWire(snapshot),
+      taxonomy: buildTaxonomyWire(taxonomy),
     });
     return {
       text: res.data.text,

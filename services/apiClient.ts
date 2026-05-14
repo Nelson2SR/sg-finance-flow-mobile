@@ -97,11 +97,23 @@ export interface CopilotSnapshotDto {
   recent_transactions: CopilotTransactionSnapshotDto[];
 }
 
+/**
+ * The user's Vault Config vocabulary sent with each chat turn so the
+ * LLM can ground CREATE_TRANSACTION proposals in the user's configured
+ * categories + labels rather than a generic fallback enum.
+ */
+export interface CopilotTaxonomyDto {
+  expense_categories: string[];
+  income_categories: string[];
+  labels: string[];
+}
+
 export interface CopilotChatRequestDto {
   persona: 'advisor' | 'friend';
   message: string;
   history: CopilotMessageDto[];
   snapshot?: CopilotSnapshotDto;
+  taxonomy?: CopilotTaxonomyDto;
 }
 
 export type CopilotActionTypeDto =
@@ -127,6 +139,14 @@ export interface CopilotActionResponseDto {
   id: number;
   action_type: CopilotActionTypeDto | string;
   payload: Record<string, any>;
+  /**
+   * Server-captured state needed to roll the action back (e.g. the
+   * newly-assigned transaction_id for a CREATE_TRANSACTION). Surfaced
+   * to the client so it can apply mobile-only side effects — e.g.
+   * patching the local store's just-created row with LLM-suggested
+   * labels that the backend doesn't store yet.
+   */
+  reversal_payload?: Record<string, any> | null;
   summary: string;
   status: 'executed' | 'rolled_back' | 'expired';
   created_at: string;
