@@ -204,13 +204,32 @@ export default function TransactionsScreen() {
                         style={{ borderWidth: 1, borderColor: themeColors.hairline }}>
                         <Ionicons name={cat.name as any} size={18} color={cat.tint} />
                       </View>
-                      <View>
+                      <View className="flex-1">
                         <Text className="font-jakarta-bold text-text-high text-base">
                           {item.merchant}
                         </Text>
-                        <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mt-0.5">
-                          {item.category}
-                        </Text>
+                        <View className="flex-row flex-wrap gap-1.5 mt-0.5 items-center">
+                          <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest">
+                            {item.category}
+                          </Text>
+                          {/* Labels: small mint chips, only when present.
+                              Lets the user spot recurring "Subscription",
+                              "Reimbursable", etc. at a glance in Activity. */}
+                          {(item.labels ?? []).map(lbl => (
+                            <View
+                              key={lbl}
+                              className="px-1.5 rounded"
+                              style={{
+                                backgroundColor: 'rgba(91, 224, 176, 0.16)',
+                                borderWidth: 1,
+                                borderColor: 'rgba(91, 224, 176, 0.32)',
+                              }}>
+                              <Text className="font-jakarta-bold text-[9px] uppercase tracking-widest text-accent-mint">
+                                {lbl}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
                       </View>
                     </View>
                     <View className="items-end">

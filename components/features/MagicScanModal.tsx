@@ -139,12 +139,30 @@ export const MagicScanReviewModal = ({
                           className={`font-jakarta-bold text-sm ${isSelected ? 'text-text-high' : 'text-text-low'}`}>
                           {item.merchant}
                         </Text>
-                        <View className="flex-row gap-2 items-center mt-1">
+                        <View className="flex-row gap-2 items-center mt-1 flex-wrap">
                           <View className="bg-surface-3 border border-hairline px-2 py-0.5 rounded-md">
                             <Text className="font-jakarta-bold text-[8px] uppercase tracking-widest text-text-mid">
                               {item.category}
                             </Text>
                           </View>
+                          {/* LLM-suggested labels — rendered as compact
+                              mint-tinted chips next to the category badge
+                              so the user can see (and dismiss the whole
+                              row if wrong) the auto-tagging before commit. */}
+                          {(item.labels ?? []).map(lbl => (
+                            <View
+                              key={lbl}
+                              className="px-2 py-0.5 rounded-md"
+                              style={{
+                                backgroundColor: 'rgba(91, 224, 176, 0.18)',
+                                borderWidth: 1,
+                                borderColor: 'rgba(91, 224, 176, 0.35)',
+                              }}>
+                              <Text className="font-jakarta-bold text-[8px] uppercase tracking-widest text-accent-mint">
+                                {lbl}
+                              </Text>
+                            </View>
+                          ))}
                           <Text className="font-jakarta text-text-low text-[10px]">{item.date}</Text>
                         </View>
                       </View>

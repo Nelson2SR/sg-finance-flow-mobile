@@ -15,7 +15,8 @@ import * as ImagePicker from 'expo-image-picker';
 
 import { useCopilotStore, WidgetPayload, CopilotPersona } from '../../store/useCopilotStore';
 import { useFinanceStore } from '../../store/useFinanceStore';
-import { scanDocumentWithGemini, ScanResponse, ScannedTransaction } from '../../services/geminiService';
+import { scanDocumentWithGemini, ScanResponse, ScannedTransaction, ScanTaxonomy } from '../../services/geminiService';
+import { useCategoriesStore } from '../../store/useCategoriesStore';
 import {
   chatWithCopilot,
   executeCopilotAction,
@@ -79,6 +80,15 @@ export default function ChatCopilotScreen() {
   const wallets = useFinanceStore(s => s.wallets);
   const transactions = useFinanceStore(s => s.transactions);
   const addTransactionsBatch = useFinanceStore(s => s.addTransactionsBatch);
+  // Build the scan taxonomy from the user's Vault Config so Gemini
+  // tags new rows with their configured categories + labels.
+  const allCategories = useCategoriesStore(s => s.categories);
+  const allLabels = useCategoriesStore(s => s.labels);
+  const buildScanTaxonomy = (): ScanTaxonomy => ({
+    expenseCategories: allCategories.filter(c => c.kind === 'expense').map(c => c.name),
+    incomeCategories: allCategories.filter(c => c.kind === 'income').map(c => c.name),
+    labels: allLabels.map(l => l.name),
+  });
   const activeWalletId = useFinanceStore(s => s.activeWalletId);
   const syncData = useFinanceStore(s => s.syncData);
 
@@ -262,7 +272,11 @@ export default function ChatCopilotScreen() {
     if (!result.canceled && result.assets[0].uri) {
       setScanModalVisible(true);
       setIsScanning(true);
-      const data = await scanDocumentWithGemini(result.assets[0].uri, 'image/jpeg');
+      const data = await scanDocumentWithGemini(
+        result.assets[0].uri,
+        'image/jpeg',
+        buildScanTaxonomy(),
+      );
       setIsScanning(false);
       setScanResult(data);
     }
@@ -277,6 +291,8 @@ export default function ChatCopilotScreen() {
         category: item.category,
         date: new Date(item.date),
         type: item.type,
+        // Carry LLM-suggested labels through to the store.
+        labels: item.labels,
       })),
     );
     setScanModalVisible(false);

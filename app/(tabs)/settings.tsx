@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { View, Text, Switch, ScrollView, TextInput, Platform, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
+import { useRouter } from 'expo-router';
 import { Surface, SurfaceHeaderArea, GradientCard, ScreenHeader, NeonButton } from '../../components/ui';
 import { useThemeColors } from '../../hooks/use-theme-colors';
 import { useCopilotStore, CopilotPersona } from '../../store/useCopilotStore';
+import { useCategoriesStore } from '../../store/useCategoriesStore';
 
 const PERSONA_OPTIONS: {
   id: CopilotPersona;
@@ -31,9 +33,12 @@ const PERSONA_OPTIONS: {
 
 export default function SettingsScreen() {
   const themeColors = useThemeColors();
+  const router = useRouter();
   const { colorScheme, setColorScheme } = useColorScheme();
   const enabledPersonas = useCopilotStore(s => s.enabledPersonas);
   const togglePersona = useCopilotStore(s => s.togglePersona);
+  const categoriesCount = useCategoriesStore(s => s.categories.length);
+  const labelsCount = useCategoriesStore(s => s.labels.length);
   const [profile, setProfile] = useState({
     name: 'Surong',
     gender: 'Female',
@@ -210,6 +215,55 @@ export default function SettingsScreen() {
             }
             last
           />
+        </GradientCard>
+
+        {/* ── Vault Config ────────────────────────────────────────────
+            CRUD entry points for the per-user taxonomy used across the
+            app (categories on transactions, free-form labels). Both
+            screens live outside `(tabs)` and are pushed via router. */}
+        <Text className="font-jakarta-bold text-text-high text-xl mb-1">Vault Config</Text>
+        <Text className="font-jakarta text-text-low text-xs mb-5 leading-relaxed">
+          Organize how transactions are tagged. Categories carry an icon and color; labels are
+          free-form tags you can stack on any transaction.
+        </Text>
+        <GradientCard padding="none" className="mb-8 overflow-hidden">
+          <Pressable
+            onPress={() => router.push('/categories')}
+            className="flex-row justify-between items-center p-5 active:bg-surface-3"
+            style={{ borderBottomWidth: 1, borderBottomColor: themeColors.hairline }}>
+            <View className="flex-row items-center gap-4">
+              <View
+                className="w-9 h-9 rounded-2xl justify-center items-center"
+                style={{ backgroundColor: 'rgba(255, 107, 74, 0.15)' }}>
+                <Ionicons name="grid" size={16} color="#FF6B4A" />
+              </View>
+              <Text className="font-jakarta-bold text-text-high text-sm">Categories</Text>
+            </View>
+            <View className="flex-row items-center gap-1">
+              <Text className="font-jakarta-bold text-text-low text-xs uppercase tracking-widest">
+                {categoriesCount}
+              </Text>
+              <Ionicons name="chevron-forward" size={14} color={themeColors.textLow} />
+            </View>
+          </Pressable>
+          <Pressable
+            onPress={() => router.push('/labels')}
+            className="flex-row justify-between items-center p-5 active:bg-surface-3">
+            <View className="flex-row items-center gap-4">
+              <View
+                className="w-9 h-9 rounded-2xl justify-center items-center"
+                style={{ backgroundColor: 'rgba(91, 224, 176, 0.15)' }}>
+                <Ionicons name="pricetag" size={14} color="#5BE0B0" />
+              </View>
+              <Text className="font-jakarta-bold text-text-high text-sm">Labels</Text>
+            </View>
+            <View className="flex-row items-center gap-1">
+              <Text className="font-jakarta-bold text-text-low text-xs uppercase tracking-widest">
+                {labelsCount}
+              </Text>
+              <Ionicons name="chevron-forward" size={14} color={themeColors.textLow} />
+            </View>
+          </Pressable>
         </GradientCard>
 
         <Text className="font-jakarta-bold text-text-high text-xl mb-1">Copilot Personas</Text>

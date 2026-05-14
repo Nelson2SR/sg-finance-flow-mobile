@@ -33,6 +33,13 @@ export interface Transaction {
   category: string;
   merchant: string;
   date: Date;
+  /**
+   * Free-form labels attached to this transaction (e.g. "Needs",
+   * "Reimbursable"). Populated by the Magic Scan auto-tagger and by
+   * the user via the manual editor. Optional so existing seed rows
+   * keep working without migration.
+   */
+  labels?: string[];
 }
 
 interface FinanceState {

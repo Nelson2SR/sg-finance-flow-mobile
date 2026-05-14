@@ -19,7 +19,8 @@ import { TransactionAdderModal } from '../../components/features/TransactionAdde
 import { CreateVaultModal } from '../../components/features/CreateVaultModal';
 import { TrendChart } from '../../components/features/TrendChart';
 import { MagicScanWindow } from '../../components/features/MagicScanWindow';
-import { scanDocumentWithGemini, ScanResponse, ScannedTransaction } from '../../services/geminiService';
+import { scanDocumentWithGemini, ScanResponse, ScannedTransaction, ScanTaxonomy } from '../../services/geminiService';
+import { useCategoriesStore } from '../../store/useCategoriesStore';
 import { MagicScanReviewModal } from '../../components/features/MagicScanModal';
 import { financeApi } from '../../services/apiClient';
 import { useAuth } from '../../context/AuthContext';
@@ -86,6 +87,15 @@ export default function HomeScreen() {
   const [scanModalVisible, setScanModalVisible] = React.useState(false);
   const [scanWindowVisible, setScanWindowVisible] = React.useState(false);
 
+  // Pull the user's configured categories + labels so the Magic Scan
+  // LLM tags new rows with their own vocabulary, not a hardcoded enum.
+  const categoriesByKind = useCategoriesStore(s => s.categories);
+  const labelsAll = useCategoriesStore(s => s.labels);
+  const buildScanTaxonomy = (): ScanTaxonomy => ({
+    expenseCategories: categoriesByKind.filter(c => c.kind === 'expense').map(c => c.name),
+    incomeCategories: categoriesByKind.filter(c => c.kind === 'income').map(c => c.name),
+    labels: labelsAll.map(l => l.name),
+  });
   const wallets = useFinanceStore(s => s.wallets);
   const transactions = useFinanceStore(s => s.transactions);
   const activeWalletId = useFinanceStore(s => s.activeWalletId);
@@ -123,7 +133,7 @@ export default function HomeScreen() {
     setScanWindowVisible(false);
     setScanModalVisible(true);
     setIsScanning(true);
-    const data = await scanDocumentWithGemini(uri, mimeType);
+    const data = await scanDocumentWithGemini(uri, mimeType, buildScanTaxonomy());
     setIsScanning(false);
     setScanResult(data);
   };
@@ -137,6 +147,9 @@ export default function HomeScreen() {
         category: tx.category,
         date: new Date(tx.date),
         type: tx.type,
+        // Carry the LLM's auto-suggested labels through so the user
+        // sees them on the Activity row right after Confirm.
+        labels: tx.labels,
       })),
     );
 
