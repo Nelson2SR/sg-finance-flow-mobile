@@ -37,6 +37,8 @@ export interface ApiTransaction {
   direction: 'DEBIT' | 'CREDIT';
   category: string;
   currency: string;
+  /** Free-form labels attached via the transaction_labels join. */
+  labels?: string[];
 }
 
 export interface ApiAccount {
@@ -168,4 +170,62 @@ export const copilotApi = {
 
   rollbackAction: (actionId: number) =>
     apiClient.post<CopilotActionResponseDto>(`/copilot/actions/${actionId}/rollback`),
+};
+
+
+// ─── Vault Config (categories + labels) ──────────────────────────────────
+// Mirror of the FastAPI shapes under /api/v1/categories,
+// /api/v1/labels, and /api/v1/transactions/{id}/labels.
+
+export type CategoryKindDto = 'expense' | 'income';
+
+export interface ApiCategory {
+  id: number;
+  name: string;
+  kind: CategoryKindDto;
+  icon: string;
+  color: string;
+  sort_order: number;
+}
+
+export interface CreateCategoryDto {
+  name: string;
+  kind: CategoryKindDto;
+  icon: string;
+  color: string;
+  sort_order?: number;
+}
+
+export interface UpdateCategoryDto {
+  name?: string;
+  kind?: CategoryKindDto;
+  icon?: string;
+  color?: string;
+  sort_order?: number;
+}
+
+export interface ApiLabel {
+  id: number;
+  name: string;
+}
+
+export const categoriesApi = {
+  list: () => apiClient.get<ApiCategory[]>('/categories'),
+  create: (body: CreateCategoryDto) => apiClient.post<ApiCategory>('/categories', body),
+  update: (id: number, body: UpdateCategoryDto) =>
+    apiClient.put<ApiCategory>(`/categories/${id}`, body),
+  remove: (id: number) =>
+    apiClient.delete<{ success: boolean; message: string }>(`/categories/${id}`),
+};
+
+export const labelsApi = {
+  list: () => apiClient.get<ApiLabel[]>('/labels'),
+  create: (name: string) => apiClient.post<ApiLabel>('/labels', { name }),
+  update: (id: number, name: string) => apiClient.put<ApiLabel>(`/labels/${id}`, { name }),
+  remove: (id: number) =>
+    apiClient.delete<{ success: boolean; message: string }>(`/labels/${id}`),
+  /** Replace the full set of labels on a transaction. Returns the
+   *  canonical label names after the write (auto-create + dedup). */
+  setForTransaction: (transactionId: number, labels: string[]) =>
+    apiClient.put<string[]>(`/transactions/${transactionId}/labels`, { labels }),
 };

@@ -91,6 +91,7 @@ export default function HomeScreen() {
   // LLM tags new rows with their own vocabulary, not a hardcoded enum.
   const categoriesByKind = useCategoriesStore(s => s.categories);
   const labelsAll = useCategoriesStore(s => s.labels);
+  const syncCategoriesFromBackend = useCategoriesStore(s => s.syncFromBackend);
   const buildScanTaxonomy = (): ScanTaxonomy => ({
     expenseCategories: categoriesByKind.filter(c => c.kind === 'expense').map(c => c.name),
     incomeCategories: categoriesByKind.filter(c => c.kind === 'income').map(c => c.name),
@@ -110,6 +111,10 @@ export default function HomeScreen() {
     // light up LogBox on every reload. Real auth flows still sync.
     if (isAuthenticated && !DEV_DISABLE_AUTH) {
       syncData();
+      // Pull the user's persisted categories + labels from backend so
+      // any customization survives a reinstall. First sync on a fresh
+      // user also bootstraps the local seeds up to the backend.
+      syncCategoriesFromBackend();
     }
   }, [isAuthenticated]);
 

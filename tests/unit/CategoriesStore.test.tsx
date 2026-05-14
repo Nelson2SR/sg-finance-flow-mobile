@@ -2,7 +2,34 @@
  * CRUD coverage for ``useCategoriesStore`` — the Zustand store backing
  * the Categories + Labels management screens accessed from
  * Settings → Vault Config.
+ *
+ * The store now fires backend write-through calls via apiClient.
+ * Tests mock the API so the synchronous CRUD assertions don't depend
+ * on a live backend; the async writes resolve with sentinel ids but
+ * the test focuses on the local-state behaviour the UI relies on.
  */
+
+jest.mock('../../services/apiClient', () => {
+  const fakeCreate = (prefix: string) =>
+    jest.fn(async (..._args: any[]) => ({
+      data: { id: 99999, name: 'mock' },
+    }));
+  return {
+    categoriesApi: {
+      list: jest.fn(async () => ({ data: [] })),
+      create: fakeCreate('cat'),
+      update: jest.fn(async () => ({ data: { id: 99999 } })),
+      remove: jest.fn(async () => ({ data: { success: true } })),
+    },
+    labelsApi: {
+      list: jest.fn(async () => ({ data: [] })),
+      create: jest.fn(async (..._args: any[]) => ({ data: { id: 99999, name: 'mock' } })),
+      update: jest.fn(async () => ({ data: { id: 99999 } })),
+      remove: jest.fn(async () => ({ data: { success: true } })),
+      setForTransaction: jest.fn(async () => ({ data: [] })),
+    },
+  };
+});
 
 import { useCategoriesStore } from '../../store/useCategoriesStore';
 

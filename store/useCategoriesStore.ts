@@ -2,6 +2,13 @@ import { create } from 'zustand';
 
 import type { IoniconName } from '../constants/CategoryIcons';
 import { DEFAULT_CATEGORY_COLOR, DEFAULT_CATEGORY_ICON } from '../constants/CategoryIcons';
+import {
+  categoriesApi,
+  labelsApi,
+  ApiCategory,
+  ApiLabel,
+  CategoryKindDto,
+} from '../services/apiClient';
 
 export type CategoryKind = 'expense' | 'income';
 
@@ -23,7 +30,19 @@ interface CategoriesState {
   categories: Category[];
   labels: Label[];
 
+  /**
+   * Replace local state with the user's backend-persisted Vault Config.
+   * If the backend lists are empty (new user), pushes the current local
+   * seeds up first — that's the one-time bootstrap so a fresh install
+   * doesn't have to manually rebuild the taxonomy. Idempotent; safe to
+   * call on every authenticated app launch.
+   */
+  syncFromBackend: () => Promise<void>;
+
   // ── Category CRUD ──────────────────────────────────────────────────
+  // CRUD methods stay synchronous so existing call sites don't need to
+  // await. Backend writes are fire-and-forget; the next syncFromBackend
+  // reconciles any divergence.
   addCategory: (cat: Omit<Category, 'id'>) => Category;
   updateCategory: (id: string, patch: Partial<Omit<Category, 'id'>>) => void;
   deleteCategory: (id: string) => void;
@@ -35,8 +54,8 @@ interface CategoriesState {
   deleteLabel: (id: string) => void;
 }
 
-// Monotonic id minter — duplicate Date.now() collisions are unlikely for
-// human CRUD speeds but cheap insurance for the reorder/import edge cases.
+// Monotonic id minter — used for transient local IDs before the backend
+// assigns the canonical numeric id (which we then stringify and swap in).
 let _seq = 0;
 const mintId = (prefix: string) => `${prefix}_${Date.now()}_${++_seq}`;
 
@@ -68,77 +87,167 @@ const seedCategories = (): Category[] => [
 // common in a SG personal-finance context. Users can rename/delete any
 // of them; this is just a starter taxonomy so a new install isn't blank.
 const seedLabels = (): Label[] => [
-  // Budget hygiene (50/30/20 split + classic envelope language)
   { id: 'lbl_needs', name: 'Needs' },
   { id: 'lbl_wants', name: 'Wants' },
   { id: 'lbl_savings', name: 'Savings' },
-
-  // Recurring / commitment
   { id: 'lbl_subscription', name: 'Subscription' },
   { id: 'lbl_recurring', name: 'Recurring Bill' },
-
-  // Tax + work
   { id: 'lbl_reimbursable', name: 'Reimbursable' },
   { id: 'lbl_tax_deductible', name: 'Tax Deductible' },
   { id: 'lbl_business', name: 'Business' },
-
-  // Life events / shared
   { id: 'lbl_family', name: 'Family Shared' },
   { id: 'lbl_gift', name: 'Gift' },
   { id: 'lbl_emergency', name: 'Emergency' },
   { id: 'lbl_travel', name: 'Travel' },
-
-  // SG-specific
   { id: 'lbl_cpf', name: 'CPF' },
 ];
 
-export const useCategoriesStore = create<CategoriesState>(set => ({
+const apiToCategory = (c: ApiCategory): Category => ({
+  id: String(c.id),
+  name: c.name,
+  kind: c.kind as CategoryKind,
+  icon: c.icon as IoniconName,
+  color: c.color,
+});
+
+const apiToLabel = (l: ApiLabel): Label => ({ id: String(l.id), name: l.name });
+
+// True when an id looks like a backend-assigned numeric id (post-sync).
+// Local-seeded ids look like 'cat_food' / 'lbl_needs' / 'cat_<ts>_<seq>'
+// and are skipped by write-through update / delete until the next sync
+// turns them into numbers.
+const isServerId = (id: string): boolean => /^\d+$/.test(id);
+
+export const useCategoriesStore = create<CategoriesState>((set, get) => ({
   categories: seedCategories(),
   labels: seedLabels(),
 
+  syncFromBackend: async () => {
+    try {
+      const [catRes, lblRes] = await Promise.all([categoriesApi.list(), labelsApi.list()]);
+      let serverCats = catRes.data;
+      let serverLbls = lblRes.data;
+
+      // One-time bootstrap: when the backend lists are empty but the
+      // local store has the seeded defaults (or user customizations),
+      // push them up so the user's first sync doesn't wipe their state.
+      if (serverCats.length === 0 && get().categories.length > 0) {
+        const pushed: ApiCategory[] = [];
+        for (const cat of get().categories) {
+          try {
+            const res = await categoriesApi.create({
+              name: cat.name,
+              kind: cat.kind as CategoryKindDto,
+              icon: cat.icon as string,
+              color: cat.color,
+            });
+            pushed.push(res.data);
+          } catch (err) {
+            // Swallow per-row failures so one bad seed doesn't block
+            // the rest; next sync round will retry.
+            console.warn('Failed to bootstrap category to backend', cat.name, err);
+          }
+        }
+        serverCats = pushed;
+      }
+      if (serverLbls.length === 0 && get().labels.length > 0) {
+        const pushed: ApiLabel[] = [];
+        for (const lbl of get().labels) {
+          try {
+            const res = await labelsApi.create(lbl.name);
+            pushed.push(res.data);
+          } catch (err) {
+            console.warn('Failed to bootstrap label to backend', lbl.name, err);
+          }
+        }
+        serverLbls = pushed;
+      }
+
+      set({
+        categories: serverCats.map(apiToCategory),
+        labels: serverLbls.map(apiToLabel),
+      });
+    } catch (err) {
+      // Backend unreachable / 401 / offline — keep local state and warn.
+      console.warn('Vault Config sync failed; using local state', err);
+    }
+  },
+
   addCategory: cat => {
+    const localId = mintId('cat');
     const created: Category = {
-      id: mintId('cat'),
+      id: localId,
       name: cat.name.trim() || 'Untitled',
       kind: cat.kind,
       icon: cat.icon || DEFAULT_CATEGORY_ICON,
       color: cat.color || DEFAULT_CATEGORY_COLOR,
     };
     set(state => ({ categories: [...state.categories, created] }));
+
+    // Fire-and-forget backend write. On success, swap the temp id with
+    // the server's numeric id so subsequent update / delete writes hit
+    // the right row.
+    categoriesApi
+      .create({
+        name: created.name,
+        kind: created.kind as CategoryKindDto,
+        icon: created.icon as string,
+        color: created.color,
+      })
+      .then(res => {
+        set(state => ({
+          categories: state.categories.map(c =>
+            c.id === localId ? { ...c, id: String(res.data.id) } : c,
+          ),
+        }));
+      })
+      .catch(err => console.warn('Failed to sync new category to backend', err));
+
     return created;
   },
 
-  updateCategory: (id, patch) =>
+  updateCategory: (id, patch) => {
     set(state => ({
       categories: state.categories.map(c =>
         c.id === id
           ? {
               ...c,
               ...patch,
-              // Keep the name trimmed and never empty.
               name: patch.name !== undefined ? patch.name.trim() || c.name : c.name,
             }
           : c,
       ),
-    })),
+    }));
+    if (isServerId(id)) {
+      const trimmedName =
+        patch.name !== undefined ? patch.name.trim() || undefined : undefined;
+      categoriesApi
+        .update(Number(id), {
+          name: trimmedName,
+          kind: patch.kind as CategoryKindDto | undefined,
+          icon: patch.icon as string | undefined,
+          color: patch.color,
+        })
+        .catch(err => console.warn('Failed to sync category update', err));
+    }
+  },
 
-  deleteCategory: id =>
-    set(state => ({ categories: state.categories.filter(c => c.id !== id) })),
+  deleteCategory: id => {
+    set(state => ({ categories: state.categories.filter(c => c.id !== id) }));
+    if (isServerId(id)) {
+      categoriesApi
+        .remove(Number(id))
+        .catch(err => console.warn('Failed to sync category delete', err));
+    }
+  },
 
   reorderCategories: (kind, orderedIds) =>
     set(state => {
-      // Build the new array: the reordered subset for the given kind,
-      // interleaved with untouched categories of the other kind in their
-      // current relative position. Simplest correct version:
-      //   1. Pull the ordered subset out by id.
-      //   2. Replace the kind's slice in the master list with that subset.
       const byId = new Map(state.categories.map(c => [c.id, c]));
       const orderedSubset = orderedIds
         .map(id => byId.get(id))
         .filter((c): c is Category => !!c && c.kind === kind);
       const other = state.categories.filter(c => c.kind !== kind);
-      // Preserve the original interleaving roughly: put the reordered
-      // kind's slice where it first appeared.
       const firstKindIndex = state.categories.findIndex(c => c.kind === kind);
       const next = [...other];
       const insertAt = firstKindIndex === -1 ? next.length : firstKindIndex;
@@ -147,22 +256,44 @@ export const useCategoriesStore = create<CategoriesState>(set => ({
     }),
 
   addLabel: name => {
-    const created: Label = {
-      id: mintId('lbl'),
-      name: name.trim() || 'Untitled',
-    };
+    const localId = mintId('lbl');
+    const created: Label = { id: localId, name: name.trim() || 'Untitled' };
     set(state => ({ labels: [...state.labels, created] }));
+
+    labelsApi
+      .create(created.name)
+      .then(res => {
+        set(state => ({
+          labels: state.labels.map(l =>
+            l.id === localId ? { ...l, id: String(res.data.id) } : l,
+          ),
+        }));
+      })
+      .catch(err => console.warn('Failed to sync new label to backend', err));
+
     return created;
   },
 
-  updateLabel: (id, name) =>
+  updateLabel: (id, name) => {
+    const trimmed = name.trim();
     set(state => ({
-      labels: state.labels.map(l =>
-        l.id === id ? { ...l, name: name.trim() || l.name } : l,
-      ),
-    })),
+      labels: state.labels.map(l => (l.id === id ? { ...l, name: trimmed || l.name } : l)),
+    }));
+    if (isServerId(id) && trimmed) {
+      labelsApi
+        .update(Number(id), trimmed)
+        .catch(err => console.warn('Failed to sync label update', err));
+    }
+  },
 
-  deleteLabel: id => set(state => ({ labels: state.labels.filter(l => l.id !== id) })),
+  deleteLabel: id => {
+    set(state => ({ labels: state.labels.filter(l => l.id !== id) }));
+    if (isServerId(id)) {
+      labelsApi
+        .remove(Number(id))
+        .catch(err => console.warn('Failed to sync label delete', err));
+    }
+  },
 }));
 
 // Convenience selectors for views that don't need the full state.

@@ -190,7 +190,11 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         amount: Number(tx.amount) || 0,
         category: tx.category,
         merchant: tx.description,
-        date: new Date(tx.tx_date)
+        date: new Date(tx.tx_date),
+        // Labels come from the transaction_labels join (Phase 2). Older
+        // backends omit this field; treat undefined the same as no labels.
+        labels:
+          Array.isArray(tx.labels) && tx.labels.length > 0 ? tx.labels : undefined,
       }));
 
       set({ 
