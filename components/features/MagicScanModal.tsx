@@ -1,8 +1,20 @@
-import React, { useState } from 'react';
-import { View, Text, Modal, Pressable, ActivityIndicator, FlatList } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  Modal,
+  Pressable,
+  ActivityIndicator,
+  FlatList,
+  TextInput,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { ScanResponse, ScannedTransaction } from '../../services/geminiService';
+import { useCategoriesStore } from '../../store/useCategoriesStore';
 import { useThemeColors } from '../../hooks/use-theme-colors';
 
 interface MagicScanModalProps {
@@ -11,6 +23,13 @@ interface MagicScanModalProps {
   scanData: ScanResponse | null;
   loading: boolean;
   onConfirm: (data: ScannedTransaction[]) => void;
+  /**
+   * Apply an edit to one parsed row. Optional so legacy callers without
+   * edit support still work — the row body just won't be interactive.
+   * The Home + Chat scan flows wire this to a setScanResult mutator
+   * that swaps the row in place.
+   */
+  onEditTransaction?: (index: number, patch: Partial<ScannedTransaction>) => void;
 }
 
 const getTransactionIcon = (category: string | undefined) => {
@@ -35,15 +54,24 @@ export const MagicScanReviewModal = ({
   scanData,
   loading,
   onConfirm,
+  onEditTransaction,
 }: MagicScanModalProps) => {
   const themeColors = useThemeColors();
   const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
+  /** Open a per-row edit sheet when this is non-null. */
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (scanData?.transactions) {
       setSelectedIndices(scanData.transactions.map((_, i) => i));
     }
   }, [scanData]);
+
+  // Reset edit-sheet state when the whole review modal closes so a
+  // stale index can't survive into the next scan.
+  useEffect(() => {
+    if (!visible) setEditingIndex(null);
+  }, [visible]);
 
   const toggleSelect = (index: number) => {
     setSelectedIndices(prev =>
@@ -87,10 +115,10 @@ export const MagicScanReviewModal = ({
               <ActivityIndicator size="large" color="#FF6B4A" />
               <View className="mt-8 items-center">
                 <Text className="font-jakarta-bold text-text-high text-base">
-                  Parsing with Gemini AI
+                  Analyzing your document
                 </Text>
                 <Text className="font-jakarta-bold text-text-low text-[10px] mt-1 uppercase tracking-widest">
-                  Applying SG Bank Extractors...
+                  Extracting transactions...
                 </Text>
               </View>
             </View>
@@ -117,22 +145,29 @@ export const MagicScanReviewModal = ({
                 renderItem={({ item, index }) => {
                   const isSelected = selectedIndices.includes(index);
                   const icon = getTransactionIcon(item.category);
+                  // Outer Pressable opens edit sheet; the icon-circle
+                  // has its own Pressable so a tap there toggles
+                  // selection without firing the outer onPress (RN
+                  // gesture system fires the deeper Pressable first
+                  // and swallows the event).
                   return (
                     <Pressable
-                      onPress={() => toggleSelect(index)}
+                      onPress={() => onEditTransaction && setEditingIndex(index)}
                       className={`mb-3 flex-row items-center p-4 rounded-2xl border ${
                         isSelected
                           ? 'bg-surface-2 border-accent-coral'
                           : 'bg-surface-2/60 border-hairline opacity-60'
                       }`}>
-                      <View
+                      <Pressable
+                        onPress={() => toggleSelect(index)}
+                        hitSlop={8}
                         className={`w-11 h-11 rounded-2xl justify-center items-center mr-3 ${isSelected ? 'bg-accent-coral' : 'bg-surface-3'}`}>
                         <Ionicons
                           name={isSelected ? (icon.name as any) : 'ellipse-outline'}
                           size={18}
                           color={isSelected ? '#fff' : themeColors.textLow}
                         />
-                      </View>
+                      </Pressable>
 
                       <View className="flex-1">
                         <Text
@@ -214,8 +249,296 @@ export const MagicScanReviewModal = ({
               </Pressable>
             </View>
           )}
+
+          {/* Inline edit overlay — rendered on top of the review sheet
+              (absolute positioning, no nested Modal) when the user
+              taps a row body. Lets them fix LLM mistakes (wrong
+              amount, merchant, category, etc.) before committing. */}
+          {editingIndex !== null &&
+            scanData &&
+            scanData.transactions[editingIndex] &&
+            onEditTransaction && (
+              <ScanRowEditSheet
+                tx={scanData.transactions[editingIndex]}
+                onCancel={() => setEditingIndex(null)}
+                onSave={patch => {
+                  onEditTransaction(editingIndex, patch);
+                  setEditingIndex(null);
+                }}
+              />
+            )}
         </View>
       </View>
     </Modal>
   );
 };
+
+
+// ── Edit sheet ───────────────────────────────────────────────────────────
+
+
+interface ScanRowEditSheetProps {
+  tx: ScannedTransaction;
+  onCancel: () => void;
+  onSave: (patch: Partial<ScannedTransaction>) => void;
+}
+
+/**
+ * Per-row edit form rendered as an absolute-positioned overlay on top
+ * of the review sheet. Picks for category + labels are sourced from the
+ * user's Vault Config so the edits stay grounded in their vocabulary.
+ *
+ * Saves a partial patch (only the fields the user actually changed)
+ * back to the parent through ``onSave``; the parent applies it to the
+ * scanData transactions array in place.
+ */
+function ScanRowEditSheet({ tx, onCancel, onSave }: ScanRowEditSheetProps) {
+  const themeColors = useThemeColors();
+  const allCategories = useCategoriesStore(s => s.categories);
+  const allLabels = useCategoriesStore(s => s.labels);
+
+  const [merchant, setMerchant] = useState(tx.merchant);
+  const [amount, setAmount] = useState(String(tx.amount));
+  const [date, setDate] = useState(tx.date);
+  const [currency, setCurrency] = useState(tx.currency || 'SGD');
+  const [type, setType] = useState<'EXPENSE' | 'INCOME'>(tx.type);
+  const [category, setCategory] = useState(tx.category);
+  const [labels, setLabels] = useState<string[]>(tx.labels ?? []);
+
+  // Categories filtered by the currently-selected kind. When the user
+  // flips the toggle, also reset the category to the first matching
+  // option so we never have an INCOME row tagged with an EXPENSE category.
+  const kindCategories = React.useMemo(
+    () =>
+      allCategories.filter(c => c.kind === (type === 'EXPENSE' ? 'expense' : 'income')),
+    [allCategories, type],
+  );
+
+  useEffect(() => {
+    const stillValid = kindCategories.some(
+      c => c.name.toLowerCase() === category.toLowerCase(),
+    );
+    if (!stillValid && kindCategories.length > 0) {
+      setCategory(kindCategories[0].name);
+    }
+  }, [type, kindCategories, category]);
+
+  const toggleLabel = (name: string) =>
+    setLabels(prev => (prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]));
+
+  const isValid = merchant.trim().length > 0 && Number(amount) > 0;
+
+  const handleSave = () => {
+    if (!isValid) return;
+    onSave({
+      merchant: merchant.trim(),
+      amount: Math.abs(Number(amount)) || 0,
+      date,
+      currency: currency.trim() || 'SGD',
+      type,
+      category,
+      labels: labels.length > 0 ? labels : undefined,
+    });
+  };
+
+  return (
+    <View
+      className="absolute inset-0 bg-surface-0/95"
+      style={{ borderRadius: 40 }}
+      pointerEvents="auto">
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        className="flex-1">
+        <View className="px-6 pt-8 pb-4 flex-row items-center justify-between">
+          <Pressable
+            onPress={onCancel}
+            className="w-9 h-9 rounded-full bg-surface-2 border border-hairline justify-center items-center">
+            <Ionicons name="close" size={18} color={themeColors.textMid} />
+          </Pressable>
+          <Text className="font-jakarta-bold text-text-high text-base">Edit transaction</Text>
+          <View className="w-9" />
+        </View>
+
+        <ScrollView
+          className="flex-1 px-6"
+          contentContainerStyle={{ paddingBottom: 120 }}
+          showsVerticalScrollIndicator={false}>
+          {/* Type toggle — drives which category list is shown. */}
+          <View className="flex-row bg-surface-2 border border-hairline rounded-full p-1 mb-5">
+            {(['EXPENSE', 'INCOME'] as const).map(t => {
+              const selected = type === t;
+              return (
+                <Pressable
+                  key={t}
+                  onPress={() => setType(t)}
+                  className={`flex-1 py-2 rounded-full items-center ${selected ? (t === 'EXPENSE' ? 'bg-accent-rose' : 'bg-accent-mint') : ''}`}>
+                  <Text
+                    className={`font-jakarta-bold text-xs uppercase tracking-widest ${
+                      selected ? 'text-white' : 'text-text-mid'
+                    }`}>
+                    {t === 'EXPENSE' ? 'Expense' : 'Income'}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <EditField label="Merchant">
+            <TextInput
+              value={merchant}
+              onChangeText={setMerchant}
+              placeholderTextColor={themeColors.textDim}
+              placeholder="e.g. Starbucks"
+              className="bg-surface-2 px-4 py-3 rounded-2xl text-text-high text-base font-jakarta-bold border border-hairline"
+            />
+          </EditField>
+
+          <View className="flex-row gap-3">
+            <View className="flex-1">
+              <EditField label="Amount">
+                <TextInput
+                  value={amount}
+                  onChangeText={setAmount}
+                  keyboardType="decimal-pad"
+                  placeholderTextColor={themeColors.textDim}
+                  placeholder="0.00"
+                  className="bg-surface-2 px-4 py-3 rounded-2xl text-text-high text-base font-jakarta-bold border border-hairline"
+                />
+              </EditField>
+            </View>
+            <View style={{ width: 110 }}>
+              <EditField label="Currency">
+                <TextInput
+                  value={currency}
+                  onChangeText={t => setCurrency(t.toUpperCase().slice(0, 4))}
+                  autoCapitalize="characters"
+                  className="bg-surface-2 px-4 py-3 rounded-2xl text-text-high text-base font-jakarta-bold border border-hairline"
+                />
+              </EditField>
+            </View>
+          </View>
+
+          <EditField label="Date (YYYY-MM-DD)">
+            <TextInput
+              value={date}
+              onChangeText={setDate}
+              placeholderTextColor={themeColors.textDim}
+              placeholder="2026-05-14"
+              className="bg-surface-2 px-4 py-3 rounded-2xl text-text-high text-base font-jakarta-bold border border-hairline"
+            />
+          </EditField>
+
+          <EditField label="Category">
+            {kindCategories.length === 0 ? (
+              <Text className="font-jakarta text-text-low text-xs leading-relaxed">
+                No {type === 'EXPENSE' ? 'expense' : 'income'} categories yet. Add one in Settings → Vault Config.
+              </Text>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 8, paddingHorizontal: 4 }}>
+                {kindCategories.map(c => {
+                  const selected = c.name.toLowerCase() === category.toLowerCase();
+                  return (
+                    <Pressable
+                      key={c.id}
+                      onPress={() => setCategory(c.name)}
+                      className="px-3 py-2 rounded-full flex-row items-center gap-2"
+                      style={{
+                        backgroundColor: selected ? c.color : themeColors.surface2,
+                        borderWidth: 1,
+                        borderColor: selected ? c.color : themeColors.hairline,
+                      }}>
+                      <Ionicons
+                        name={c.icon}
+                        size={14}
+                        color={selected ? '#fff' : c.color}
+                      />
+                      <Text
+                        className={`font-jakarta-bold text-xs ${selected ? 'text-white' : 'text-text-mid'}`}>
+                        {c.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </EditField>
+
+          <EditField
+            label={`Labels${labels.length > 0 ? ` · ${labels.length} selected` : ''}`}>
+            {allLabels.length === 0 ? (
+              <Text className="font-jakarta text-text-low text-xs leading-relaxed">
+                No labels yet. Add some in Settings → Vault Config.
+              </Text>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 8, paddingHorizontal: 4 }}>
+                {allLabels.map(lbl => {
+                  const selected = labels.includes(lbl.name);
+                  return (
+                    <Pressable
+                      key={lbl.id}
+                      onPress={() => toggleLabel(lbl.name)}
+                      className="px-3 py-2 rounded-full flex-row items-center gap-1.5"
+                      style={{
+                        backgroundColor: selected ? '#5BE0B0' : themeColors.surface2,
+                        borderWidth: 1,
+                        borderColor: selected ? '#5BE0B0' : themeColors.hairline,
+                      }}>
+                      <Ionicons
+                        name={selected ? 'checkmark' : 'pricetag-outline'}
+                        size={12}
+                        color={selected ? '#fff' : themeColors.textMid}
+                      />
+                      <Text
+                        className={`font-jakarta-bold text-xs ${selected ? 'text-white' : 'text-text-mid'}`}>
+                        {lbl.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </EditField>
+        </ScrollView>
+
+        <View
+          className="px-6 pb-8 pt-3 flex-row gap-3"
+          style={{ borderTopWidth: 1, borderTopColor: themeColors.hairline }}>
+          <Pressable
+            onPress={onCancel}
+            className="flex-1 py-4 rounded-full items-center bg-surface-3 border border-hairline">
+            <Text className="font-jakarta-bold text-text-mid text-xs uppercase tracking-widest">
+              Cancel
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={handleSave}
+            disabled={!isValid}
+            className={`flex-1 py-4 rounded-full items-center bg-accent-coral ${isValid ? '' : 'opacity-50'}`}
+            style={isValid ? { boxShadow: '0 0 18px rgba(255, 107, 74, 0.45)' } : null}>
+            <Text className="font-jakarta-bold text-white text-xs uppercase tracking-widest">
+              Save changes
+            </Text>
+          </Pressable>
+        </View>
+      </KeyboardAvoidingView>
+    </View>
+  );
+}
+
+
+function EditField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <View className="mb-4">
+      <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-2 px-1">
+        {label}
+      </Text>
+      {children}
+    </View>
+  );
+}

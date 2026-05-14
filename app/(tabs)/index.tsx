@@ -27,6 +27,7 @@ import { useAuth } from '../../context/AuthContext';
 import { DEV_DISABLE_AUTH } from '../../constants/Config';
 import { Surface, SurfaceHeaderArea, GradientCard, NeonButton } from '../../components/ui';
 import { useThemeColors } from '../../hooks/use-theme-colors';
+import { resolveCategoryStyle, tintWithAlpha } from '../../lib/categoryStyle';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width - 48;
@@ -63,18 +64,6 @@ const tintForVaultType = (type: string) => {
   }
 };
 
-const txIcon = (domain: string) => {
-  switch (domain.toLowerCase()) {
-    case 'dining':
-      return { name: 'restaurant-outline', tint: '#FFB547' };
-    case 'transport':
-      return { name: 'car-outline', tint: '#5BE0B0' };
-    case 'entertainment':
-      return { name: 'film-outline', tint: '#A78BFA' };
-    default:
-      return { name: 'card-outline', tint: '#FF6B4A' };
-  }
-};
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -184,6 +173,9 @@ export default function HomeScreen() {
             direction: tx.type === 'INCOME' ? 'CREDIT' : 'DEBIT',
             category: tx.category,
             currency: 'SGD',
+            // Phase 2.1: pass auto-suggested labels through the upload
+            // pipeline so the backend writes the transaction_labels join.
+            labels: tx.labels ?? [],
           })),
         });
         syncData();
@@ -396,22 +388,28 @@ export default function HomeScreen() {
           ) : (
             <View className="gap-3">
               {localTransactions.map(tx => {
-                const icon = txIcon(tx.category);
+                const icon = resolveCategoryStyle(tx.category, categoriesByKind);
                 const isIncome = tx.type === 'INCOME';
                 return (
                   <GradientCard key={tx.id} padding="md" radius="row">
                     <View className="flex-row justify-between items-center">
                       <View className="flex-row items-center gap-4">
                         <View
-                          className="w-11 h-11 rounded-2xl bg-surface-3 justify-center items-center"
-                          style={{ borderWidth: 1, borderColor: themeColors.hairline }}>
+                          className="w-11 h-11 rounded-2xl justify-center items-center"
+                          style={{
+                            backgroundColor: tintWithAlpha(icon.tint, 0.14),
+                            borderWidth: 1,
+                            borderColor: tintWithAlpha(icon.tint, 0.32),
+                          }}>
                           <Ionicons name={icon.name as any} size={18} color={icon.tint} />
                         </View>
                         <View>
                           <Text className="font-jakarta-bold text-text-high text-base">
                             {tx.merchant}
                           </Text>
-                          <Text className="font-jakarta-bold text-text-low text-[10px] mt-0.5 uppercase tracking-widest">
+                          <Text
+                            className="font-jakarta-bold text-[10px] mt-0.5 uppercase tracking-widest"
+                            style={{ color: icon.tint }}>
                             {tx.category}
                           </Text>
                         </View>
@@ -439,6 +437,18 @@ export default function HomeScreen() {
         loading={isScanning}
         scanData={scanResult}
         onConfirm={confirmScan}
+        onEditTransaction={(index, patch) =>
+          setScanResult(prev =>
+            prev
+              ? {
+                  ...prev,
+                  transactions: prev.transactions.map((t, i) =>
+                    i === index ? { ...t, ...patch } : t,
+                  ),
+                }
+              : prev,
+          )
+        }
       />
       <MagicScanWindow
         visible={scanWindowVisible}

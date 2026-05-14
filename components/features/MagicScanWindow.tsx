@@ -85,7 +85,7 @@ export const MagicScanWindow = ({ visible, onClose, onSelectFile }: MagicScanWin
           </View>
 
           <Text className="font-jakarta text-text-mid mb-7 leading-relaxed text-sm">
-            Select your source. We primarily support PDF e-statements from all major SG banks.
+            Select your source. We support PDF e-statements and receipt photos.
           </Text>
 
           <View className="gap-3">

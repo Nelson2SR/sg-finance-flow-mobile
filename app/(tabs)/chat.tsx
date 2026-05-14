@@ -517,6 +517,18 @@ export default function ChatCopilotScreen() {
         loading={isScanning}
         scanData={scanResult}
         onConfirm={confirmScan}
+        onEditTransaction={(index, patch) =>
+          setScanResult(prev =>
+            prev
+              ? {
+                  ...prev,
+                  transactions: prev.transactions.map((t, i) =>
+                    i === index ? { ...t, ...patch } : t,
+                  ),
+                }
+              : prev,
+          )
+        }
       />
     </Surface>
   );

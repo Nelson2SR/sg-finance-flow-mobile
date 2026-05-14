@@ -3,28 +3,11 @@ import { View, Text, SectionList, TouchableOpacity, ScrollView, TextInput, Platf
 import { Ionicons } from '@expo/vector-icons';
 import { format, isToday, isYesterday, startOfWeek, startOfMonth, startOfYear, isAfter } from 'date-fns';
 import { useFinanceStore } from '../../store/useFinanceStore';
+import { useCategoriesStore } from '../../store/useCategoriesStore';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { Surface, SurfaceHeaderArea, GradientCard, ScreenHeader, NeonButton } from '../../components/ui';
 import { useThemeColors } from '../../hooks/use-theme-colors';
-
-const getCategoryConfig = (category: string) => {
-  switch (category.toLowerCase()) {
-    case 'dining':
-      return { name: 'restaurant-outline', tint: '#FFB547' };
-    case 'transport':
-      return { name: 'car-outline', tint: '#5BE0B0' };
-    case 'entertainment':
-      return { name: 'film-outline', tint: '#A78BFA' };
-    case 'shopping':
-      return { name: 'bag-handle-outline', tint: '#FF5C7C' };
-    case 'salary':
-      return { name: 'cash-outline', tint: '#5BE0B0' };
-    case 'crypto':
-      return { name: 'logo-bitcoin', tint: '#FFB547' };
-    default:
-      return { name: 'card-outline', tint: '#FF6B4A' };
-  }
-};
+import { resolveCategoryStyle, resolveLabelColor, tintWithAlpha } from '../../lib/categoryStyle';
 
 type TimeFilter = 'WEEK' | 'MONTH' | 'YEAR' | 'ALL';
 const TIME_FILTERS: TimeFilter[] = ['ALL', 'WEEK', 'MONTH', 'YEAR'];
@@ -40,6 +23,16 @@ export default function TransactionsScreen() {
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('ALL');
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  /**
+   * Active label filter. null = no filter (default). When set, the
+   * list shows only transactions whose `labels` array contains a
+   * case-insensitive match. Tapping a label chip on any row toggles
+   * this; tapping the dedicated chip row toggles too.
+   */
+  const [labelFilter, setLabelFilter] = useState<string | null>(null);
+
+  const allLabels = useCategoriesStore(s => s.labels);
+  const allCategoriesList = useCategoriesStore(s => s.categories);
 
   const filteredTransactions = transactions.filter(t => {
     if (activeWalletId !== 'ALL' && t.walletId !== activeWalletId) return false;
@@ -51,8 +44,19 @@ export default function TransactionsScreen() {
 
     if (searchQuery && !t.merchant.toLowerCase().includes(searchQuery.toLowerCase())) return false;
 
+    if (labelFilter) {
+      const target = labelFilter.toLowerCase();
+      const has = (t.labels ?? []).some(l => l.toLowerCase() === target);
+      if (!has) return false;
+    }
+
     return true;
   });
+
+  // Toggle helper for label filter: tapping the active label clears it,
+  // tapping a different label switches to that one.
+  const toggleLabelFilter = (name: string) =>
+    setLabelFilter(current => (current === name ? null : name));
 
   const grouped = filteredTransactions.reduce(
     (acc, curr) => {
@@ -174,6 +178,65 @@ export default function TransactionsScreen() {
             </Chip>
           ))}
         </ScrollView>
+
+        {/* Label filter — only shown when the user has configured at
+            least one label. Tapping a chip filters the list to rows
+            tagged with that label; tapping the active chip clears the
+            filter. Mint accent matches the label chips elsewhere
+            (scan modal, activity rows). */}
+        {allLabels.length > 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 8, paddingHorizontal: 24, paddingTop: 10 }}>
+            <Pressable
+              onPress={() => setLabelFilter(null)}
+              className={`px-4 py-2 rounded-full flex-row items-center gap-1.5 border ${
+                labelFilter === null
+                  ? 'bg-accent-mint border-accent-mint'
+                  : 'bg-surface-2 border-hairline'
+              }`}>
+              <Ionicons
+                name="pricetags-outline"
+                size={12}
+                color={labelFilter === null ? '#fff' : themeColors.textMid}
+              />
+              <Text
+                className={`font-jakarta-bold text-[10px] tracking-widest uppercase ${
+                  labelFilter === null ? 'text-white' : 'text-text-mid'
+                }`}>
+                All Labels
+              </Text>
+            </Pressable>
+            {allLabels.map(lbl => {
+              const active = labelFilter === lbl.name;
+              const tint = resolveLabelColor(lbl.name);
+              return (
+                <Pressable
+                  key={lbl.id}
+                  onPress={() => toggleLabelFilter(lbl.name)}
+                  className="px-4 py-2 rounded-full flex-row items-center gap-1.5"
+                  style={{
+                    backgroundColor: active ? tint : tintWithAlpha(tint, 0.14),
+                    borderWidth: 1,
+                    borderColor: active ? tint : tintWithAlpha(tint, 0.32),
+                    boxShadow: active ? `0 0 14px ${tintWithAlpha(tint, 0.4)}` : undefined,
+                  }}>
+                  <Ionicons
+                    name={active ? 'checkmark' : 'pricetag-outline'}
+                    size={12}
+                    color={active ? '#fff' : tint}
+                  />
+                  <Text
+                    className="font-jakarta-bold text-[10px] tracking-widest uppercase"
+                    style={{ color: active ? '#ffffff' : tint }}>
+                    {lbl.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        )}
       </SurfaceHeaderArea>
 
       <SectionList
@@ -191,7 +254,7 @@ export default function TransactionsScreen() {
           </Text>
         )}
         renderItem={({ item }) => {
-          const cat = getCategoryConfig(item.category);
+          const cat = resolveCategoryStyle(item.category, allCategoriesList);
           const isIncome = item.type === 'INCOME';
           return (
             <View className="mb-3">
@@ -200,8 +263,12 @@ export default function TransactionsScreen() {
                   <View className="flex-row justify-between items-center">
                     <View className="flex-row items-center gap-4">
                       <View
-                        className="w-11 h-11 rounded-2xl bg-surface-3 justify-center items-center"
-                        style={{ borderWidth: 1, borderColor: themeColors.hairline }}>
+                        className="w-11 h-11 rounded-2xl justify-center items-center"
+                        style={{
+                          backgroundColor: tintWithAlpha(cat.tint, 0.14),
+                          borderWidth: 1,
+                          borderColor: tintWithAlpha(cat.tint, 0.32),
+                        }}>
                         <Ionicons name={cat.name as any} size={18} color={cat.tint} />
                       </View>
                       <View className="flex-1">
@@ -209,26 +276,42 @@ export default function TransactionsScreen() {
                           {item.merchant}
                         </Text>
                         <View className="flex-row flex-wrap gap-1.5 mt-0.5 items-center">
-                          <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest">
+                          <Text
+                            className="font-jakarta-bold text-[10px] uppercase tracking-widest"
+                            style={{ color: cat.tint }}>
                             {item.category}
                           </Text>
                           {/* Labels: small mint chips, only when present.
-                              Lets the user spot recurring "Subscription",
-                              "Reimbursable", etc. at a glance in Activity. */}
-                          {(item.labels ?? []).map(lbl => (
-                            <View
-                              key={lbl}
-                              className="px-1.5 rounded"
-                              style={{
-                                backgroundColor: 'rgba(91, 224, 176, 0.16)',
-                                borderWidth: 1,
-                                borderColor: 'rgba(91, 224, 176, 0.32)',
-                              }}>
-                              <Text className="font-jakarta-bold text-[9px] uppercase tracking-widest text-accent-mint">
-                                {lbl}
-                              </Text>
-                            </View>
-                          ))}
+                              Tappable — sets the top label filter to the
+                              chosen tag. Active filter chip glows. */}
+                          {(item.labels ?? []).map(lbl => {
+                            const isActiveFilter = labelFilter === lbl;
+                            const tint = resolveLabelColor(lbl);
+                            return (
+                              <Pressable
+                                key={lbl}
+                                onPress={() => toggleLabelFilter(lbl)}
+                                className="px-1.5 rounded"
+                                style={{
+                                  backgroundColor: isActiveFilter
+                                    ? tint
+                                    : tintWithAlpha(tint, 0.16),
+                                  borderWidth: 1,
+                                  borderColor: isActiveFilter
+                                    ? tint
+                                    : tintWithAlpha(tint, 0.32),
+                                  boxShadow: isActiveFilter
+                                    ? `0 0 10px ${tintWithAlpha(tint, 0.45)}`
+                                    : undefined,
+                                }}>
+                                <Text
+                                  className="font-jakarta-bold text-[9px] uppercase tracking-widest"
+                                  style={{ color: isActiveFilter ? '#ffffff' : tint }}>
+                                  {lbl}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
                         </View>
                       </View>
                     </View>
