@@ -1,8 +1,10 @@
 import { CopilotPersona, ChatMessage } from '../store/useCopilotStore';
 import {
   copilotApi,
+  CopilotActionResponseDto,
   CopilotMessageDto,
   CopilotSnapshotDto,
+  CopilotToolCallDto,
 } from './apiClient';
 
 /**
@@ -13,6 +15,8 @@ import {
 export interface FinanceSnapshot {
   wallets: { name: string; type: string; currency: string; balance: number }[];
   recentTransactions: {
+    /** Backend transaction id — needed for UPDATE / DELETE proposals. */
+    id?: number;
     merchant: string;
     category: string;
     amount: number;
@@ -25,6 +29,9 @@ export interface CopilotReply {
   text: string;
   /** True when the backend served a canned phrase (LLM unavailable). */
   fallback: boolean;
+  /** Optional record-manipulating action the LLM proposed. Render as a
+   *  Confirm card; execute via executeCopilotAction() on accept. */
+  toolCall?: CopilotToolCallDto | null;
 }
 
 // Per-persona client-side fallbacks — used only when the backend itself
@@ -69,7 +76,17 @@ const buildHistoryWire = (
 
 const buildSnapshotWire = (snapshot: FinanceSnapshot): CopilotSnapshotDto => ({
   wallets: snapshot.wallets,
-  recent_transactions: snapshot.recentTransactions,
+  // Explicit mapping so the id field is guaranteed to make it on to
+  // the wire (the LLM needs it to propose UPDATE_TRANSACTION_CATEGORY
+  // and DELETE_TRANSACTION on previously-logged rows).
+  recent_transactions: snapshot.recentTransactions.map(t => ({
+    id: t.id,
+    merchant: t.merchant,
+    category: t.category,
+    amount: t.amount,
+    type: t.type,
+    date: t.date,
+  })),
 });
 
 /**
@@ -96,12 +113,38 @@ export async function chatWithCopilot({
       history: buildHistoryWire(history, persona),
       snapshot: buildSnapshotWire(snapshot),
     });
-    return { text: res.data.text, fallback: res.data.fallback };
+    return {
+      text: res.data.text,
+      fallback: res.data.fallback,
+      toolCall: res.data.tool_call ?? null,
+    };
   } catch (err) {
     // Warn (not error) so RN's LogBox doesn't pop a red banner. The
     // call fails for the usual reasons in dev — backend offline,
     // unreachable LAN IP, 401 with a fake token under DEV_DISABLE_AUTH.
     console.warn(`Copilot (${persona}) chat failed`, err);
-    return { text: pickClientFallback(persona), fallback: true };
+    return { text: pickClientFallback(persona), fallback: true, toolCall: null };
   }
+}
+
+/**
+ * Execute a Copilot-proposed action after the user confirms in the UI.
+ * Writes the domain change AND appends to the 3-day rollback log.
+ */
+export async function executeCopilotAction(toolCall: CopilotToolCallDto): Promise<CopilotActionResponseDto> {
+  const res = await copilotApi.executeAction({
+    type: toolCall.type,
+    payload: toolCall.payload ?? {},
+    summary: toolCall.summary ?? '',
+  });
+  return res.data;
+}
+
+/**
+ * Undo a previously-executed Copilot action. Backend enforces the 3-day
+ * retention window and rejects double-rollbacks with 409.
+ */
+export async function rollbackCopilotAction(actionId: number): Promise<CopilotActionResponseDto> {
+  const res = await copilotApi.rollbackAction(actionId);
+  return res.data;
 }

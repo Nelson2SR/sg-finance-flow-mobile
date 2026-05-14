@@ -156,11 +156,15 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         financeApi.getTransactions({ page_size: 100 })
       ]);
 
+      // FastAPI serialises Decimal columns as JSON strings (Pydantic
+      // default). The mobile UI assumes plain numbers — `tx.amount.toFixed(2)`
+      // crashed the Home screen with "toFixed is not a function" when we
+      // mapped these straight through. Coerce defensively here.
       const mappedWallets: Wallet[] = accountsRes.data.map(acc => ({
         id: acc.id.toString(),
         name: acc.name,
         type: acc.account_type === 'SAVINGS' ? 'PERSONAL' : 'FAMILY', // Heuristic
-        balance: acc.balance,
+        balance: Number(acc.balance) || 0,
         currency: acc.currency
       }));
 
@@ -168,7 +172,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         id: tx.id.toString(),
         walletId: 'w1', // Default to first wallet for now
         type: tx.direction === 'CREDIT' ? 'INCOME' : 'EXPENSE',
-        amount: tx.amount,
+        amount: Number(tx.amount) || 0,
         category: tx.category,
         merchant: tx.description,
         date: new Date(tx.tx_date)

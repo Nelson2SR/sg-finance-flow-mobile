@@ -10,6 +10,32 @@ export interface WidgetPayload {
   targetWallet?: string;
 }
 
+/**
+ * Lifecycle of a record-manipulating action the LLM proposed inside a
+ * chat bubble. Drives the in-bubble confirmation card UI.
+ */
+export type ToolCallStatus =
+  | 'proposed'   // LLM proposed it; show Confirm + Dismiss
+  | 'executing'  // POST in flight; disable buttons
+  | 'executed'   // server returned an action id; show "Done • Undo"
+  | 'rolling_back' // rollback in flight
+  | 'rolled_back'  // server confirmed rollback
+  | 'dismissed'  // user tapped Dismiss
+  | 'failed';    // server rejected; show error + retry
+
+export interface ToolCall {
+  /** Backend action type — CREATE_TRANSACTION, etc. ROLLBACK_ACTION is
+   *  also accepted; the chat handler dispatches it to the rollback API. */
+  type: string;
+  payload: Record<string, any>;
+  summary: string;
+  status: ToolCallStatus;
+  /** Populated once the server executes the action; needed for undo. */
+  executedActionId?: number;
+  /** Populated when status is 'failed'; human-readable. */
+  error?: string;
+}
+
 export interface ChatMessage {
   id: string;
   sender: 'user' | 'bot';
@@ -22,6 +48,8 @@ export interface ChatMessage {
    */
   persona: CopilotPersona;
   widget?: WidgetPayload;
+  /** Set when the LLM appended an [[ACTION:...]] proposal to this turn. */
+  toolCall?: ToolCall;
 }
 
 interface CopilotState {
@@ -41,7 +69,12 @@ interface CopilotState {
   enabledPersonas: CopilotPersona[];
   addMessage: (
     msg: Omit<ChatMessage, 'id' | 'timestamp' | 'persona'> & { persona?: CopilotPersona },
-  ) => void;
+  ) => string;
+  /**
+   * Patch the toolCall on a specific message — used by the confirmation
+   * card to flip status from proposed → executing → executed → rolled_back.
+   */
+  updateToolCall: (messageId: string, patch: Partial<ToolCall>) => void;
   setPersonaTyping: (persona: CopilotPersona, isTyping: boolean) => void;
   togglePersona: (persona: CopilotPersona) => void;
   clearChat: () => void;
@@ -70,13 +103,14 @@ export const useCopilotStore = create<CopilotState>(set => ({
   typingPersonas: [],
   enabledPersonas: ['advisor'],
 
-  addMessage: msg =>
+  addMessage: msg => {
+    const id = nextId();
     set(state => ({
       messages: [
         ...state.messages,
         {
           ...msg,
-          id: nextId(),
+          id,
           timestamp: new Date(),
           // Default to the first enabled persona (advisor by default).
           // Callers that care about which persona authored — bot replies —
@@ -84,6 +118,17 @@ export const useCopilotStore = create<CopilotState>(set => ({
           persona: msg.persona ?? state.enabledPersonas[0] ?? 'advisor',
         },
       ],
+    }));
+    return id;
+  },
+
+  updateToolCall: (messageId, patch) =>
+    set(state => ({
+      messages: state.messages.map(m =>
+        m.id === messageId && m.toolCall
+          ? { ...m, toolCall: { ...m.toolCall, ...patch } }
+          : m,
+      ),
     })),
 
   setPersonaTyping: (persona, isTyping) =>

@@ -16,7 +16,13 @@ import * as ImagePicker from 'expo-image-picker';
 import { useCopilotStore, WidgetPayload, CopilotPersona } from '../../store/useCopilotStore';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { scanDocumentWithGemini, ScanResponse, ScannedTransaction } from '../../services/geminiService';
-import { chatWithCopilot, FinanceSnapshot } from '../../services/copilotService';
+import {
+  chatWithCopilot,
+  executeCopilotAction,
+  rollbackCopilotAction,
+  FinanceSnapshot,
+} from '../../services/copilotService';
+import { ToolCallCard } from '../../components/features/ToolCallCard';
 import { MagicScanReviewModal } from '../../components/features/MagicScanModal';
 import { Surface, SurfaceHeaderArea, GradientCard, ScreenHeader } from '../../components/ui';
 import { useThemeColors } from '../../hooks/use-theme-colors';
@@ -65,6 +71,7 @@ export default function ChatCopilotScreen() {
 
   const messages = useCopilotStore(s => s.messages);
   const addMessage = useCopilotStore(s => s.addMessage);
+  const updateToolCall = useCopilotStore(s => s.updateToolCall);
   const enabledPersonas = useCopilotStore(s => s.enabledPersonas);
   const typingPersonas = useCopilotStore(s => s.typingPersonas);
   const setPersonaTyping = useCopilotStore(s => s.setPersonaTyping);
@@ -73,6 +80,7 @@ export default function ChatCopilotScreen() {
   const transactions = useFinanceStore(s => s.transactions);
   const addTransactionsBatch = useFinanceStore(s => s.addTransactionsBatch);
   const activeWalletId = useFinanceStore(s => s.activeWalletId);
+  const syncData = useFinanceStore(s => s.syncData);
 
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResponse | null>(null);
@@ -90,13 +98,22 @@ export default function ChatCopilotScreen() {
     recentTransactions: [...transactions]
       .sort((a, b) => b.date.getTime() - a.date.getTime())
       .slice(0, 10)
-      .map(t => ({
-        merchant: t.merchant,
-        category: t.category,
-        amount: t.amount,
-        type: t.type === 'INCOME' ? 'INCOME' : 'EXPENSE',
-        date: t.date.toISOString().slice(0, 10),
-      })),
+      .map(t => {
+        // The local store keeps `id` as a string. After syncData() it's
+        // the stringified backend id (e.g. "135"); for seed/local-only
+        // rows it's a non-numeric tag like "t1" or "tx_<ts>_1". Coerce
+        // to int when possible and drop otherwise — the LLM is told to
+        // refuse UPDATE/DELETE proposals for rows that lack an id.
+        const numericId = Number(t.id);
+        return {
+          id: Number.isFinite(numericId) && /^\d+$/.test(t.id) ? numericId : undefined,
+          merchant: t.merchant,
+          category: t.category,
+          amount: t.amount,
+          type: (t.type === 'INCOME' ? 'INCOME' : 'EXPENSE') as 'INCOME' | 'EXPENSE',
+          date: t.date.toISOString().slice(0, 10),
+        };
+      }),
   });
 
   // Send the user message, then every enabled persona calls Gemini in
@@ -128,7 +145,22 @@ export default function ChatCopilotScreen() {
         minTyping,
       ])
         .then(([reply]) => {
-          addMessage({ sender: 'bot', text: reply.text, persona });
+          addMessage({
+            sender: 'bot',
+            text: reply.text,
+            persona,
+            // Hand the proposed action to the message so the bubble can
+            // render an inline confirmation card. Friend persona never
+            // proposes actions (server defensively drops them too).
+            toolCall: reply.toolCall
+              ? {
+                  type: reply.toolCall.type,
+                  payload: reply.toolCall.payload ?? {},
+                  summary: reply.toolCall.summary ?? '',
+                  status: 'proposed',
+                }
+              : undefined,
+          });
         })
         .finally(() => setPersonaTyping(persona, false));
     });
@@ -141,6 +173,84 @@ export default function ChatCopilotScreen() {
       'Voice Input',
       'Voice capture is wired into the UI but the recorder lands in a follow-up. Press and hold here to speak once the recorder ships.',
     );
+  };
+
+  // ── Tool-call lifecycle ────────────────────────────────────────────
+  // The confirmation card on each bot bubble drives these three:
+  //   Confirm → executeCopilotAction → mark message's toolCall as executed
+  //   Dismiss → just flip status to dismissed (no server call)
+  //   Undo    → rollbackCopilotAction → mark as rolled_back
+  // The server enforces the 3-day retention window and returns 409/410
+  // if the user tries to undo a stale action — we surface that as an alert.
+
+  const handleConfirmAction = async (messageId: string) => {
+    const msg = messages.find(m => m.id === messageId);
+    if (!msg?.toolCall) return;
+    updateToolCall(messageId, { status: 'executing' });
+
+    // ROLLBACK_ACTION is a special case — it goes to the rollback API
+    // rather than executeAction, using action_id from the payload.
+    try {
+      if (msg.toolCall.type === 'ROLLBACK_ACTION') {
+        const targetId = Number(msg.toolCall.payload?.action_id);
+        if (!Number.isFinite(targetId)) {
+          throw new Error('Copilot did not specify a valid action_id');
+        }
+        await rollbackCopilotAction(targetId);
+        updateToolCall(messageId, { status: 'rolled_back', executedActionId: targetId });
+      } else {
+        const result = await executeCopilotAction({
+          type: msg.toolCall.type,
+          payload: msg.toolCall.payload,
+          summary: msg.toolCall.summary,
+        });
+        updateToolCall(messageId, {
+          status: 'executed',
+          executedActionId: result.id,
+        });
+      }
+      // The action mutated server-side data (created / deleted /
+      // updated a transaction). Refresh the local finance store so
+      // Home and Activity reflect the change immediately — without
+      // this the user only sees their new transaction after the next
+      // app reload.
+      void syncData();
+    } catch (err: any) {
+      const detail =
+        err?.response?.data?.detail || err?.message || 'Action failed. Please try again.';
+      updateToolCall(messageId, { status: 'failed', error: String(detail) });
+    }
+  };
+
+  const handleDismissAction = (messageId: string) => {
+    updateToolCall(messageId, { status: 'dismissed' });
+  };
+
+  const handleUndoAction = async (messageId: string) => {
+    const msg = messages.find(m => m.id === messageId);
+    const actionId = msg?.toolCall?.executedActionId;
+    if (!actionId) return;
+    updateToolCall(messageId, { status: 'rolling_back' });
+    try {
+      await rollbackCopilotAction(actionId);
+      updateToolCall(messageId, { status: 'rolled_back' });
+      // Refresh local store so the rolled-back transaction disappears
+      // from Home / Activity immediately.
+      void syncData();
+    } catch (err: any) {
+      const status = err?.response?.status;
+      // 409 = already rolled back, 410 = past retention. Both are
+      // "this is no longer undoable" — treat as terminal rolled_back so
+      // the UI stops offering the button.
+      if (status === 409 || status === 410) {
+        updateToolCall(messageId, { status: 'rolled_back' });
+      } else {
+        const detail =
+          err?.response?.data?.detail || err?.message || 'Undo failed. Please try again.';
+        updateToolCall(messageId, { status: 'executed', error: String(detail) });
+        Alert.alert('Undo failed', String(detail));
+      }
+    }
   };
 
   const handleMagicScan = async () => {
@@ -264,6 +374,14 @@ export default function ChatCopilotScreen() {
                   </GradientCard>
                 )}
                 {msg.widget && <ActionWidget payload={msg.widget} />}
+                {msg.toolCall && (
+                  <ToolCallCard
+                    toolCall={msg.toolCall}
+                    onConfirm={() => handleConfirmAction(msg.id)}
+                    onDismiss={() => handleDismissAction(msg.id)}
+                    onUndo={() => handleUndoAction(msg.id)}
+                  />
+                )}
               </View>
             </View>
           );
