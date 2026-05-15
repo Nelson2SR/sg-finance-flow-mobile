@@ -8,11 +8,20 @@
  * for future imports of the same bank's statements.
  *
  * Keys:
- *   bankpw::{userId}::{bank}  → the password itself
- *   bankpw_idx::{userId}      → JSON array of bank slugs the user has
- *                                stored a password for (used by the
- *                                Privacy settings screen to enumerate
- *                                without scanning every possible key).
+ *   bankpw.{userId}.{BANK}   → the password itself
+ *   bankpw-idx.{userId}      → JSON array of bank slugs the user has
+ *                              stored a password for (used by the
+ *                              Privacy settings screen to enumerate
+ *                              without scanning every possible key).
+ *
+ * SecureStore only permits keys matching `[a-zA-Z0-9._-]+`, so dots
+ * and dashes are the separators of choice. The `bankpw.` prefix vs
+ * the `bankpw-idx.` prefix keeps index keys disjoint from password
+ * keys even if a future bank happens to be named "IDX".
+ *
+ * Bank slugs are uppercased and stripped to legal characters so a
+ * future backend that returns "DBS Premier" doesn't try to store a
+ * key with a space in it. Unknown becomes "UNKNOWN".
  *
  * The Keychain itself enforces device-level access control — biometric
  * unlock + Secure Enclave on iOS, EncryptedSharedPreferences on Android.
@@ -20,9 +29,14 @@
 
 import * as SecureStore from 'expo-secure-store';
 
+const sanitizeBank = (bank: string): string => {
+  const cleaned = (bank || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return cleaned || 'UNKNOWN';
+};
+
 const passwordKey = (userId: number, bank: string) =>
-  `bankpw::${userId}::${bank.toUpperCase()}`;
-const indexKey = (userId: number) => `bankpw_idx::${userId}`;
+  `bankpw.${userId}.${sanitizeBank(bank)}`;
+const indexKey = (userId: number) => `bankpw-idx.${userId}`;
 
 async function readIndex(userId: number): Promise<string[]> {
   const raw = await SecureStore.getItemAsync(indexKey(userId));

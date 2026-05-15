@@ -170,9 +170,9 @@ describe('parsePdfWithPasswordFlow', () => {
 
   it('uses a cached password silently when one exists for the bank', async () => {
     // Pre-stash a password for DBS.
-    await (SecureStore.setItemAsync as jest.Mock)('bankpw::7::DBS', 'cached');
+    await (SecureStore.setItemAsync as jest.Mock)('bankpw.7.DBS', 'cached');
     await (SecureStore.setItemAsync as jest.Mock)(
-      'bankpw_idx::7',
+      'bankpw-idx.7',
       JSON.stringify(['DBS']),
     );
 

@@ -98,7 +98,7 @@ describe('listSavedBanks', () => {
 
   it('returns [] when the index is corrupted JSON', async () => {
     // Manually poison the index key.
-    await (SecureStore as any).setItemAsync('bankpw_idx::7', 'not-valid-json');
+    await (SecureStore as any).setItemAsync('bankpw-idx.7', 'not-valid-json');
     expect(await listSavedBanks(7)).toEqual([]);
   });
 
@@ -124,6 +124,56 @@ describe('forgetBankPassword', () => {
     // Must not throw.
     await forgetBankPassword(7, 'WHATEVER');
     expect(await listSavedBanks(7)).toEqual([]);
+  });
+});
+
+/**
+ * SecureStore (iOS Keychain) rejects keys containing anything outside
+ * ``[a-zA-Z0-9._-]``. Any separator-character bug breaks the entire
+ * Privacy screen at runtime, so we pin the legal-key invariant here.
+ */
+describe('SecureStore key format', () => {
+  const LEGAL_KEY = /^[A-Za-z0-9._-]+$/;
+
+  it('every key passed to setItemAsync matches [A-Za-z0-9._-]+', async () => {
+    await setBankPassword(7, 'DBS', 's3cret');
+    await setBankPassword(7, 'OCBC', 'x');
+    await setBankPassword(42, 'UOB', 'y');
+
+    const keys = (SecureStore.setItemAsync as jest.Mock).mock.calls.map(
+      (c) => c[0],
+    );
+    expect(keys.length).toBeGreaterThan(0);
+    for (const k of keys) {
+      expect(k).toMatch(LEGAL_KEY);
+      // No accidental double-separators that the old format had.
+      expect(k).not.toContain('::');
+    }
+  });
+
+  it('every key passed to deleteItemAsync matches the legal regex', async () => {
+    await setBankPassword(7, 'DBS', 's');
+    await forgetBankPassword(7, 'DBS');
+    await forgetAllBankPasswords(7);
+
+    const keys = (SecureStore.deleteItemAsync as jest.Mock).mock.calls.map(
+      (c) => c[0],
+    );
+    expect(keys.length).toBeGreaterThan(0);
+    for (const k of keys) {
+      expect(k).toMatch(LEGAL_KEY);
+    }
+  });
+
+  it('sanitises bank slugs with spaces or punctuation', async () => {
+    // Future-proof: if the backend ever returns a bank slug with
+    // characters the Keychain rejects, we must not crash. Strip
+    // non-alphanumeric and uppercase before composing the key.
+    await setBankPassword(7, 'DBS Premier', 'x');
+    const keys = (SecureStore.setItemAsync as jest.Mock).mock.calls.map(
+      (c) => c[0],
+    );
+    expect(keys).toContain('bankpw.7.DBSPREMIER');
   });
 });
 
