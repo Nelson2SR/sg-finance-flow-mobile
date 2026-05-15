@@ -235,18 +235,30 @@ export default function LoginScreen() {
         <GradientCard padding="lg" accent="coral">
           {step === 'landing' && (
             <View className="gap-3">
-              <NeonButton
-                size="lg"
-                block
-                loading={isBusy}
-                onPress={handleWeChat}>
-                <View className="flex-row items-center justify-center gap-2">
-                  <Ionicons name="logo-wechat" size={20} color="white" />
-                  <Text className="font-jakarta-bold text-white text-base">
-                    Continue with WeChat
-                  </Text>
-                </View>
-              </NeonButton>
+              {/* WeChat login is hidden in production builds:
+               *   1. The native SDK isn't wired yet — only the dev stub
+               *      backend honours `dev-<timestamp>` codes.
+               *   2. Offering WeChat AND another third-party login would
+               *      trip Apple Guideline 4.8 (Sign in with Apple
+               *      requirement). Phone OTP alone is exempt.
+               *   3. App Review would see a button that doesn't work
+               *      end-to-end, which is a guideline 2.1 rejection.
+               * Re-enable here once WeChat SDK + Open Platform are live
+               * AND Sign in with Apple is in place. */}
+              {__DEV__ && (
+                <NeonButton
+                  size="lg"
+                  block
+                  loading={isBusy}
+                  onPress={handleWeChat}>
+                  <View className="flex-row items-center justify-center gap-2">
+                    <Ionicons name="logo-wechat" size={20} color="white" />
+                    <Text className="font-jakarta-bold text-white text-base">
+                      Continue with WeChat
+                    </Text>
+                  </View>
+                </NeonButton>
+              )}
 
               <Pressable
                 onPress={() => setStep('phone')}

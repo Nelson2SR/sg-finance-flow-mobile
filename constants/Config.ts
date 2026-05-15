@@ -2,17 +2,45 @@ import { Platform } from 'react-native';
 
 /**
  * SG Finance Flow Mobile Configuration
+ *
+ * Backend URL resolution (in priority order):
+ *
+ *   1. `EXPO_PUBLIC_API_URL` env var (set by `eas.json` build profiles
+ *      or at `expo start` time). This is the canonical path for
+ *      preview/production builds — the URL is baked into the bundle
+ *      at build time so it cannot accidentally be left at localhost.
+ *
+ *   2. Local LAN fallback for `expo start` development without an env
+ *      var. Replace `LOCAL_IP` with your Mac's LAN IP so a physical
+ *      iPhone on the same Wi-Fi can reach the dev server.
+ *
+ * In `__DEV__ === false` (release builds), step 2 is treated as fatal:
+ * we throw at module-load if no env var was injected, so a production
+ * build can NEVER ship pointing at a private IP.
  */
 
-// Auto-detect backend URL based on environment
-// 10.0.2.2 is the magic IP for Android Emulator to hit host localhost
-// 127.0.0.1 works for iOS Simulator
-// const LOCAL_IP = Platform.OS === 'android' ? '10.0.2.2' : '127.0.0.1';
 const LOCAL_IP = '192.168.50.76';
-// For real device testing, you should replace this with your computer's local IP
-// Example: '192.168.1.5'
+const DEV_FALLBACK = `http://${LOCAL_IP}:8000/api/v1`;
+
+const envApiUrl = process.env.EXPO_PUBLIC_API_URL;
+
+function resolveApiBaseUrl(): string {
+  if (envApiUrl && envApiUrl.trim() !== '') {
+    return envApiUrl;
+  }
+  if (!__DEV__) {
+    // Fail loud: any release build that reaches this line was built
+    // without EXPO_PUBLIC_API_URL and would otherwise try to talk to a
+    // LAN IP that doesn't exist for end users. See eas.json.
+    throw new Error(
+      'EXPO_PUBLIC_API_URL is required for production builds. Set it in eas.json.',
+    );
+  }
+  return DEV_FALLBACK;
+}
+
 export const API_CONFIG = {
-  BASE_URL: `http://${LOCAL_IP}:8000/api/v1`,
+  BASE_URL: resolveApiBaseUrl(),
 };
 
 // Skip the entire login flow in dev. When true, AuthContext synthesises

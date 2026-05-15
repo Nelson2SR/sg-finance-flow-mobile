@@ -187,11 +187,18 @@ export default function AnalyticsScreen() {
           ) : (
             <View className="gap-3">
               {activeBudgets.map(b => {
-                const artificialSpend =
-                  transactions
-                    .filter(t => t.merchant && t.type === 'EXPENSE')
-                    .reduce((a, c) => a + c.amount, 0) % b.amount;
-                const p = Math.min(artificialSpend / b.amount, 1);
+                // Real spend against this budget: sum EXPENSE rows in
+                // the budget's wallet scope. We don't yet bucket by
+                // recurrence window (DAILY/MONTHLY/ONCE) — that lands
+                // when transactions carry a normalised period; for now
+                // we surface lifetime spend which is at least honest.
+                const inScope = b.wallets === 'ALL'
+                  ? transactions.filter(t => t.type === 'EXPENSE')
+                  : transactions.filter(
+                      t => t.type === 'EXPENSE' && b.wallets.includes(t.walletId),
+                    );
+                const realSpend = inScope.reduce((a, c) => a + c.amount, 0);
+                const p = Math.min(realSpend / b.amount, 1);
                 const overBudget = p > 0.8;
                 return (
                   <GradientCard key={b.id} padding="md" radius="row">
@@ -204,7 +211,7 @@ export default function AnalyticsScreen() {
                       </View>
                       <View className="items-end">
                         <Text className="font-jakarta-bold text-text-high text-base">
-                          ${artificialSpend.toFixed(0)}
+                          ${realSpend.toFixed(0)}
                         </Text>
                         <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mt-1">
                           of ${b.amount}
@@ -227,18 +234,26 @@ export default function AnalyticsScreen() {
           )}
         </View>
 
-        <Text className="font-jakarta-bold text-text-high text-xl mb-5">Subscription Drains</Text>
-        <GradientCard padding="lg" radius="row">
-          <View className="items-center py-2">
-            <Ionicons name="repeat-outline" size={22} color={themeColors.textLow} />
-            <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mt-2 mb-1">
-              Coming soon
-            </Text>
-            <Text className="font-jakarta text-text-mid text-xs text-center leading-relaxed px-2">
-              Recurring charges will surface here once we detect them in your imported activity.
-            </Text>
-          </View>
-        </GradientCard>
+        {/* Subscription Drains: not yet implemented end-to-end. Hidden
+         * in release builds to avoid an Apple guideline 2.1 "incomplete
+         * functionality" rejection. The dev surface still shows the
+         * placeholder so the design+contract is visible during work. */}
+        {__DEV__ && (
+          <>
+            <Text className="font-jakarta-bold text-text-high text-xl mb-5">Subscription Drains</Text>
+            <GradientCard padding="lg" radius="row">
+              <View className="items-center py-2">
+                <Ionicons name="repeat-outline" size={22} color={themeColors.textLow} />
+                <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mt-2 mb-1">
+                  Coming soon
+                </Text>
+                <Text className="font-jakarta text-text-mid text-xs text-center leading-relaxed px-2">
+                  Recurring charges will surface here once we detect them in your imported activity.
+                </Text>
+              </View>
+            </GradientCard>
+          </>
+        )}
       </ScrollView>
 
       <CreateBudgetModal visible={budgetModalVisible} onClose={() => setBudgetModalVisible(false)} />
