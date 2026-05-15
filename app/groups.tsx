@@ -18,6 +18,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
+  Platform,
   Pressable,
   ScrollView,
   Share,
@@ -50,6 +51,7 @@ export default function GroupsScreen() {
   const createGroup = useVaultGroupsStore(s => s.createGroup);
   const generateInvite = useVaultGroupsStore(s => s.generateInvite);
   const leaveGroup = useVaultGroupsStore(s => s.leaveGroup);
+  const consumeInvite = useVaultGroupsStore(s => s.consumeInvite);
 
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
@@ -66,10 +68,26 @@ export default function GroupsScreen() {
       const url = INVITE_BASE_URL + code;
       const group = groups.find(g => g.id === groupId);
       const groupName = group?.name ?? 'my vault';
-      await Share.share({
-        message: `Join "${groupName}" on SG Finance Flow: ${url}`,
-        url,
-      });
+
+      // Reveal the code in an Alert *before* the Share sheet so dev
+      // testing isn't blocked by the absence of working universal-link
+      // config. The recipient (or a re-login as a different user)
+      // pastes the code into the "Have a code?" row at the top.
+      Alert.alert(
+        'Invite ready',
+        `Code: ${code}\n\nLink: ${url}\n\nShare this code or link with whoever you want to add to "${groupName}".`,
+        [
+          { text: 'Done', style: 'cancel' },
+          {
+            text: 'Share',
+            onPress: () =>
+              Share.share({
+                message: `Join "${groupName}" on SG Finance Flow: ${url}`,
+                url,
+              }),
+          },
+        ],
+      );
     } catch (err: any) {
       Alert.alert(
         'Could not generate invite',
@@ -78,6 +96,48 @@ export default function GroupsScreen() {
     } finally {
       setBusyGroupId(null);
     }
+  };
+
+  /**
+   * Manually paste an invite code. Useful for dev testing without
+   * a working universal-link config — and also a reasonable backup
+   * UX for production users on platforms whose messenger app strips
+   * URL preview previews (rare, but happens).
+   */
+  const handleJoinByCode = () => {
+    const finish = async (code: string | null) => {
+      if (!code) return;
+      try {
+        const joined = await consumeInvite(code.trim());
+        Alert.alert('Joined!', `You're now a member of "${joined.name}".`);
+      } catch (err: any) {
+        const detail = err?.response?.data?.detail;
+        const message =
+          typeof detail === 'object' && detail?.message
+            ? detail.message
+            : typeof detail === 'string'
+              ? detail
+              : 'The code may be expired or already used.';
+        Alert.alert('Could not join', message);
+      }
+    };
+
+    if (Platform.OS !== 'ios') {
+      Alert.alert(
+        'iOS only',
+        'Pasting an invite code with a text prompt is iOS-only for now. On Android, please use the share link instead.',
+      );
+      return;
+    }
+    (Alert as any).prompt(
+      'Have an invite code?',
+      'Paste the code (or the bit after /invite/ in a share link) to join the group.',
+      [
+        { text: 'Cancel', style: 'cancel', onPress: () => finish(null) },
+        { text: 'Join', onPress: (value?: string) => finish(value ?? null) },
+      ],
+      'plain-text',
+    );
   };
 
   const handleCreate = async () => {
@@ -153,6 +213,29 @@ export default function GroupsScreen() {
             All members see every member's activity, each row stamped with the
             author's avatar.
           </Text>
+
+          {/* ── Join via code ───────────────────────────────────────── */}
+          <Pressable
+            onPress={handleJoinByCode}
+            className="mb-6">
+            <GradientCard padding="lg" accent="mint">
+              <View className="flex-row justify-between items-center">
+                <View className="flex-1 pr-4">
+                  <Text className="font-jakarta-bold text-text-high text-base mb-1">
+                    Have an invite code?
+                  </Text>
+                  <Text className="font-jakarta text-text-mid text-xs leading-relaxed">
+                    Paste a code from someone who invited you to join their group.
+                  </Text>
+                </View>
+                <View
+                  className="w-10 h-10 rounded-full justify-center items-center"
+                  style={{ backgroundColor: 'rgba(91, 224, 176, 0.18)' }}>
+                  <Ionicons name="enter-outline" size={20} color="#5BE0B0" />
+                </View>
+              </View>
+            </GradientCard>
+          </Pressable>
 
           {/* ── Group list ──────────────────────────────────────────── */}
           {groups.length === 0 ? (
