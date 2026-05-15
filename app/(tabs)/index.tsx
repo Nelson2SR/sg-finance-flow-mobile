@@ -368,16 +368,27 @@ export default function HomeScreen() {
           })}
         </View>
 
+        {/* The two add-transaction actions read as a pair: same coral
+            family, same shape, same icon weight. Magic Scan stays the
+            "killer action" (solid coral fill + glow); Add Entry is its
+            quieter sibling with a translucent coral fill + coral
+            border, so both feel like primary actions while the
+            hierarchy is preserved by intensity. */}
         <View className="flex-row gap-3 px-6 mb-10">
-          <NeonButton
-            variant="secondary"
-            size="lg"
-            icon="add-circle-outline"
-            block
+          <Pressable
             onPress={() => setModalVisible(true)}
-            style={{ flex: 1 }}>
-            Add Entry
-          </NeonButton>
+            className="flex-row items-center justify-center gap-2 rounded-full py-3.5 active:scale-95 transition-all"
+            style={{
+              flex: 1,
+              backgroundColor: 'rgba(255, 107, 74, 0.12)',
+              borderWidth: 1.5,
+              borderColor: 'rgba(255, 107, 74, 0.45)',
+            }}>
+            <Ionicons name="add-circle-outline" size={20} color="#FF6B4A" />
+            <Text className="font-jakarta-bold text-accent-coral text-base">
+              Add Entry
+            </Text>
+          </Pressable>
           <NeonButton
             size="lg"
             icon="flash-outline"
