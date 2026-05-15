@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Switch, ScrollView, TextInput, Platform, Pressable } from 'react-native';
+import { Alert, View, Text, Switch, ScrollView, TextInput, Platform, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
 import { useRouter } from 'expo-router';
@@ -7,6 +7,7 @@ import { Surface, SurfaceHeaderArea, GradientCard, ScreenHeader, NeonButton } fr
 import { useThemeColors } from '../../hooks/use-theme-colors';
 import { useCopilotStore, CopilotPersona } from '../../store/useCopilotStore';
 import { useCategoriesStore } from '../../store/useCategoriesStore';
+import { useAuth } from '../../context/AuthContext';
 
 const PERSONA_OPTIONS: {
   id: CopilotPersona;
@@ -39,6 +40,7 @@ export default function SettingsScreen() {
   const togglePersona = useCopilotStore(s => s.togglePersona);
   const categoriesCount = useCategoriesStore(s => s.categories.length);
   const labelsCount = useCategoriesStore(s => s.labels.length);
+  const { user, logout } = useAuth();
   const [profile, setProfile] = useState({
     name: 'Surong',
     gender: 'Female',
@@ -340,6 +342,79 @@ export default function SettingsScreen() {
               </View>
             );
           })}
+        </GradientCard>
+
+        {/* ── Account ─────────────────────────────────────────────────
+            Sign-out lives here so dev/test flows can rotate between
+            stub WeChat users (`dev-<timestamp>` codes) without having
+            to delete the app from the simulator. Shows the active
+            user id so it's obvious whose session is being dropped. */}
+        <Text className="font-jakarta-bold text-text-high text-xl mb-1">Account</Text>
+        <Text className="font-jakarta text-text-low text-xs mb-5 leading-relaxed">
+          Signed in as <Text className="font-jakarta-bold text-text-mid">
+            {user?.display_name ?? `user #${user?.id ?? '?'}`}
+          </Text>.
+          Signing out clears tokens on this device and bounces you back to the
+          login screen so the next provider tap creates a fresh session.
+        </Text>
+        <GradientCard padding="none" className="mb-8 overflow-hidden">
+          <Pressable
+            onPress={() =>
+              Alert.alert(
+                'Sign out?',
+                'You will return to the login screen. Saved bank PDF passwords stay on this device.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Sign out',
+                    style: 'destructive',
+                    onPress: () => void logout(),
+                  },
+                ],
+              )
+            }
+            className="flex-row justify-between items-center p-5 active:bg-surface-3">
+            <View className="flex-row items-center gap-4">
+              <View
+                className="w-9 h-9 rounded-2xl justify-center items-center"
+                style={{ backgroundColor: 'rgba(255, 92, 124, 0.15)' }}>
+                <Ionicons name="log-out-outline" size={16} color="#FF5C7C" />
+              </View>
+              <Text className="font-jakarta-bold text-text-high text-sm">
+                Sign out of this device
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={14} color={themeColors.textLow} />
+          </Pressable>
+          <Pressable
+            onPress={() =>
+              Alert.alert(
+                'Sign out everywhere?',
+                "Revokes every session for this account on every device, and wipes saved bank PDF passwords from this device's Keychain.",
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Sign out everywhere',
+                    style: 'destructive',
+                    onPress: () => void logout({ allDevices: true }),
+                  },
+                ],
+              )
+            }
+            className="flex-row justify-between items-center p-5 active:bg-surface-3"
+            style={{ borderTopWidth: 1, borderTopColor: themeColors.hairline }}>
+            <View className="flex-row items-center gap-4">
+              <View
+                className="w-9 h-9 rounded-2xl justify-center items-center"
+                style={{ backgroundColor: 'rgba(255, 92, 124, 0.25)' }}>
+                <Ionicons name="globe-outline" size={16} color="#FF5C7C" />
+              </View>
+              <Text className="font-jakarta-bold text-text-high text-sm">
+                Sign out everywhere
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={14} color={themeColors.textLow} />
+          </Pressable>
         </GradientCard>
 
         <Text className="font-jakarta-bold text-text-high text-xl mb-5">Security Zone</Text>
