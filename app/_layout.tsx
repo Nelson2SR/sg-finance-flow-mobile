@@ -17,8 +17,10 @@ import {
 import '../global.css';
 import { AuthProvider } from '../context/AuthContext';
 import { AuthGuard } from '../components/AuthGuard';
+import { BiometricGate } from '../components/BiometricGate';
 import * as Linking from 'expo-linking';
 import { useVaultGroupsStore } from '../store/useVaultGroupsStore';
+import { useBiometricStore } from '../lib/biometricLock';
 
 
 
@@ -83,6 +85,15 @@ function useDeepLinkInviteCapture() {
 
 export default function RootLayout() {
   useDeepLinkInviteCapture();
+
+  // Read the persisted biometric-lock preference once at startup so
+  // the gate has a definitive enabled/locked answer before the first
+  // tab renders. This sets the lock to engaged-if-enabled — the gate
+  // overlay then runs the FaceID/TouchID prompt automatically.
+  useEffect(() => {
+    void useBiometricStore.getState().hydrate();
+  }, []);
+
   return (
 
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -163,6 +174,7 @@ function RootLayoutNav() {
         <Stack.Screen name="groups" options={{ headerShown: false }} />
       </Stack>
       <AuthGuard />
+      <BiometricGate />
       <StatusBar style={isDark ? 'light' : 'dark'} />
     </ThemeProvider>
   );

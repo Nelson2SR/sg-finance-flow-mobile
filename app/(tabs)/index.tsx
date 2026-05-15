@@ -5,6 +5,7 @@ import {
   Pressable,
   FlatList,
   Dimensions,
+  Modal,
   NativeSyntheticEvent,
   NativeScrollEvent,
   Platform,
@@ -73,6 +74,8 @@ export default function HomeScreen() {
   const themeColors = useThemeColors();
   const [modalVisible, setModalVisible] = React.useState(false);
   const [vaultModalVisible, setVaultModalVisible] = React.useState(false);
+  const [groupSwitcherVisible, setGroupSwitcherVisible] = React.useState(false);
+  const setActiveGroup = useVaultGroupsStore(s => s.setActiveGroup);
 
   const [isScanning, setIsScanning] = React.useState(false);
   const [scanResult, setScanResult] = React.useState<ScanResponse | null>(null);
@@ -194,7 +197,11 @@ export default function HomeScreen() {
         const activeWallet = wallets.find(w => w.id === activeWalletId);
         await financeApi.confirmUpload({
           file_hash: `mobile_${Date.now()}`,
-          bank: activeWallet?.name || 'UNKNOWN',
+          // `bank` is a strict enum (DBS|OCBC|UOB|CITI|UNKNOWN) — the
+          // wallet's display name doesn't fit it, so we send UNKNOWN.
+          // Once the parser hands back a confidence-typed bank guess
+          // (Phase 2.2), thread it through here.
+          bank: 'UNKNOWN',
           account_type: activeWallet?.type === 'PERSONAL' ? 'SAVINGS' : 'CREDIT_CARD',
           account_name: activeWallet?.name || 'Default',
           transactions: added.map(tx => ({
@@ -203,7 +210,7 @@ export default function HomeScreen() {
             amount: tx.amount,
             direction: tx.type === 'INCOME' ? 'CREDIT' : 'DEBIT',
             category: tx.category,
-            currency: 'SGD',
+            currency: activeWallet?.currency ?? 'SGD',
             // Phase 2.1: pass auto-suggested labels through the upload
             // pipeline so the backend writes the transaction_labels join.
             labels: tx.labels ?? [],
@@ -324,19 +331,35 @@ export default function HomeScreen() {
     <Surface>
       <SurfaceHeaderArea>
         <View className="flex-row justify-between items-center px-6 pt-3 pb-6">
-          <View className="flex-row items-center gap-3">
+          {/* Active-group chip: makes the current vault context
+              visible at a glance and is the entry point to the
+              switcher (Settings → Vault Groups → Manage was too
+              deep for routine context toggling). */}
+          <Pressable
+            onPress={() => setGroupSwitcherVisible(true)}
+            disabled={vaultGroups.length <= 1}
+            className="flex-row items-center gap-3 active:opacity-80">
             <View
               className="w-10 h-10 rounded-full bg-accent-coral justify-center items-center"
               style={{ boxShadow: '0 0 20px rgba(255, 107, 74, 0.5)' }}>
-              <Text className="font-jakarta-bold text-white text-base">SG</Text>
+              <Text className="font-jakarta-bold text-white text-base">
+                {activeVaultGroup?.emoji ?? '🏡'}
+              </Text>
             </View>
             <View>
               <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-1">
-                Welcome back
+                {vaultGroups.length > 1 ? 'Active vault' : 'Vault'}
               </Text>
-              <Text className="font-jakarta-bold text-text-high text-lg">Dashboard</Text>
+              <View className="flex-row items-center gap-1">
+                <Text className="font-jakarta-bold text-text-high text-lg">
+                  {activeVaultGroup?.name ?? 'My Vault'}
+                </Text>
+                {vaultGroups.length > 1 && (
+                  <Ionicons name="chevron-down" size={14} color={themeColors.textMid} />
+                )}
+              </View>
             </View>
-          </View>
+          </Pressable>
           <Pressable
             className="w-10 h-10 rounded-full bg-surface-2 border border-hairline justify-center items-center">
             <Ionicons name="notifications-outline" size={18} color="#FF6B4A" />
@@ -347,39 +370,108 @@ export default function HomeScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 120 : 100 }}>
-        <FlatList
-          data={extendedWallets}
-          renderItem={renderWalletCard}
-          keyExtractor={item => item.id}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          onMomentumScrollEnd={handleScroll}
-          className="flex-none mb-5"
-          style={{ height: 210 }}
-        />
+        {/* First-launch path: brand-new account, no wallets yet. Show a
+            two-step onboarding checklist instead of the wallet carousel
+            so users have an obvious next action. Once one wallet is
+            created the standard carousel + action buttons take over. */}
+        {wallets.length === 0 ? (
+          <View className="px-6 mb-2">
+            <View className="mb-6 mt-2">
+              <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-2">
+                Get started
+              </Text>
+              <Text className="font-jakarta-bold text-text-high text-2xl tracking-tighter">
+                Two quick steps
+              </Text>
+              <Text className="font-jakarta text-text-mid text-sm mt-2 leading-relaxed">
+                Set up a wallet to track money in, then import or log
+                your first transaction.
+              </Text>
+            </View>
 
-        <View className="flex-row justify-center gap-2 mb-8">
-          {extendedWallets.map(w => {
-            const isActive = w.id === activeWalletId;
-            const isTrigger = w.id === 'NEW_VAULT_TRIGGER';
-            return (
-              <View
-                key={w.id}
-                className={`h-1.5 rounded-full ${
-                  isActive && !isTrigger ? 'w-6 bg-accent-coral' : 'w-1.5 bg-surface-3'
-                }`}
-              />
-            );
-          })}
-        </View>
+            {/* Step 1 — Add wallet */}
+            <Pressable onPress={() => setVaultModalVisible(true)}>
+              <GradientCard padding="lg" accent="coral" className="mb-3">
+                <View className="flex-row items-center gap-4">
+                  <View
+                    className="w-11 h-11 rounded-2xl bg-accent-coral justify-center items-center"
+                    style={{ boxShadow: '0 0 16px rgba(255, 107, 74, 0.45)' }}>
+                    <Text className="font-jakarta-bold text-white text-base">1</Text>
+                  </View>
+                  <View className="flex-1">
+                    <Text className="font-jakarta-bold text-text-high text-base">
+                      Add your first wallet
+                    </Text>
+                    <Text className="font-jakarta text-text-low text-xs mt-1">
+                      Bank account, trip fund, anything you want to track
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={themeColors.textMid} />
+                </View>
+              </GradientCard>
+            </Pressable>
+
+            {/* Step 2 — Import / log a transaction. Disabled until step 1. */}
+            <View className="opacity-50">
+              <GradientCard padding="lg" radius="card">
+                <View className="flex-row items-center gap-4">
+                  <View
+                    className="w-11 h-11 rounded-2xl bg-surface-3 border border-hairline justify-center items-center">
+                    <Text className="font-jakarta-bold text-text-low text-base">2</Text>
+                  </View>
+                  <View className="flex-1">
+                    <Text className="font-jakarta-bold text-text-high text-base">
+                      Import a statement or add an entry
+                    </Text>
+                    <Text className="font-jakarta text-text-low text-xs mt-1">
+                      Magic Scan a PDF or type a single transaction
+                    </Text>
+                  </View>
+                  <Ionicons name="lock-closed-outline" size={18} color={themeColors.textLow} />
+                </View>
+              </GradientCard>
+            </View>
+          </View>
+        ) : (
+          <>
+            <FlatList
+              data={extendedWallets}
+              renderItem={renderWalletCard}
+              keyExtractor={item => item.id}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={handleScroll}
+              className="flex-none mb-5"
+              style={{ height: 210 }}
+            />
+
+            <View className="flex-row justify-center gap-2 mb-8">
+              {extendedWallets.map(w => {
+                const isActive = w.id === activeWalletId;
+                const isTrigger = w.id === 'NEW_VAULT_TRIGGER';
+                return (
+                  <View
+                    key={w.id}
+                    className={`h-1.5 rounded-full ${
+                      isActive && !isTrigger ? 'w-6 bg-accent-coral' : 'w-1.5 bg-surface-3'
+                    }`}
+                  />
+                );
+              })}
+            </View>
+          </>
+        )}
 
         {/* The two add-transaction actions read as a pair: same coral
             family, same shape, same icon weight. Magic Scan stays the
             "killer action" (solid coral fill + glow); Add Entry is its
             quieter sibling with a translucent coral fill + coral
             border, so both feel like primary actions while the
-            hierarchy is preserved by intensity. */}
+            hierarchy is preserved by intensity.
+            Hidden while the user is still on the first-launch
+            checklist (no wallets yet) — the checklist owns the CTA. */}
+        {wallets.length > 0 && (
         <View className="flex-row gap-3 px-6 mb-10">
           <Pressable
             onPress={() => {
@@ -425,6 +517,7 @@ export default function HomeScreen() {
             Magic Scan
           </NeonButton>
         </View>
+        )}
 
         <View className="px-6">
           <TrendChart />
@@ -515,6 +608,71 @@ export default function HomeScreen() {
         onClose={() => setScanWindowVisible(false)}
         onSelectFile={handleSelectFile}
       />
+
+      {/* Quick switch between Vault Groups without leaving Home.
+          Tapping a group flips activeGroupId in the store, which
+          fires the cache reset + refetch wired in useVaultGroupsStore. */}
+      <Modal
+        visible={groupSwitcherVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setGroupSwitcherVisible(false)}>
+        <Pressable
+          className="flex-1 bg-black/40 justify-end"
+          onPress={() => setGroupSwitcherVisible(false)}>
+          <Pressable
+            className="bg-surface-1 rounded-t-[40px] px-6 pt-6 pb-12"
+            style={{ borderTopWidth: 1, borderTopColor: themeColors.hairline }}
+            onPress={(e) => e.stopPropagation()}>
+            <View className="flex-row justify-between items-center mb-6">
+              <Text className="font-jakarta-bold text-text-high text-xl">Switch vault</Text>
+              <Pressable
+                onPress={() => setGroupSwitcherVisible(false)}
+                className="w-9 h-9 rounded-full bg-surface-2 border border-hairline justify-center items-center">
+                <Ionicons name="close" size={18} color={themeColors.textMid} />
+              </Pressable>
+            </View>
+            {vaultGroups.map((g) => {
+              const isActive = g.id === activeGroupId;
+              return (
+                <Pressable
+                  key={g.id}
+                  onPress={() => {
+                    if (!isActive) setActiveGroup(g.id);
+                    setGroupSwitcherVisible(false);
+                  }}
+                  className="flex-row items-center gap-4 p-4 rounded-2xl mb-2 active:bg-surface-3"
+                  style={{
+                    backgroundColor: isActive ? 'rgba(255, 107, 74, 0.12)' : 'transparent',
+                    borderWidth: 1,
+                    borderColor: isActive ? 'rgba(255, 107, 74, 0.45)' : themeColors.hairline,
+                  }}>
+                  <View className="w-10 h-10 rounded-full bg-surface-2 border border-hairline justify-center items-center">
+                    <Text className="text-lg">{g.emoji ?? '🏡'}</Text>
+                  </View>
+                  <View className="flex-1">
+                    <Text className="font-jakarta-bold text-text-high text-base">{g.name}</Text>
+                  </View>
+                  {isActive && (
+                    <Ionicons name="checkmark-circle" size={20} color="#FF6B4A" />
+                  )}
+                </Pressable>
+              );
+            })}
+            <Pressable
+              onPress={() => {
+                setGroupSwitcherVisible(false);
+                router.push('/groups');
+              }}
+              className="flex-row items-center justify-center gap-2 mt-3 py-3 rounded-2xl bg-surface-2 border border-hairline">
+              <Ionicons name="settings-outline" size={16} color={themeColors.textMid} />
+              <Text className="font-jakarta-bold text-text-mid text-sm">
+                Manage vaults
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </Surface>
   );
 }

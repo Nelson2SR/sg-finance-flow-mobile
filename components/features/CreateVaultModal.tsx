@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import { Alert, View, Text, Pressable, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import axios from 'axios';
+
+import { financeApi } from '../../services/apiClient';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { useThemeColors } from '../../hooks/use-theme-colors';
 
@@ -20,22 +23,46 @@ const TYPES: { id: VaultType; label: string; icon: keyof typeof Ionicons.glyphMa
 
 export const CreateVaultModal = ({ visible, onClose }: Props) => {
   const themeColors = useThemeColors();
-  const addWallet = useFinanceStore(s => s.addWallet);
+  const syncData = useFinanceStore(s => s.syncData);
+  const setActiveWallet = useFinanceStore(s => s.setActiveWallet);
 
   const [name, setName] = useState('');
   const [type, setType] = useState<VaultType>('PERSONAL');
   const [currency] = useState('SGD');
   const [nameFocused, setNameFocused] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleSave = () => {
-    if (!name.trim()) return;
-    addWallet({ name, type, currency, balance: 0 });
-    setName('');
-    setType('PERSONAL');
-    onClose();
+  const handleSave = async () => {
+    const trimmed = name.trim();
+    if (!trimmed || isSaving) return;
+    setIsSaving(true);
+    try {
+      const resp = await financeApi.createAccount({
+        name: trimmed,
+        wallet_type: type,
+        currency,
+      });
+      // Pull the full wallet list back so the Home carousel and every
+      // group-scoped read sees the new row consistently; activeWalletId
+      // is then set to the just-created id so the user sees it
+      // foregrounded the moment the modal closes.
+      await syncData();
+      setActiveWallet(String(resp.data.id));
+      setName('');
+      setType('PERSONAL');
+      onClose();
+    } catch (err) {
+      const detail = axios.isAxiosError(err) ? err.response?.data?.detail : null;
+      Alert.alert(
+        'Could not create wallet',
+        typeof detail === 'string' ? detail : 'Please check your connection and try again.',
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const isValid = name.trim().length > 0;
+  const isValid = name.trim().length > 0 && !isSaving;
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
@@ -98,7 +125,7 @@ export const CreateVaultModal = ({ visible, onClose }: Props) => {
             className={`py-4 rounded-full items-center active:scale-95 ${isValid ? 'bg-accent-coral' : 'bg-surface-3'}`}>
             <Text
               className={`font-jakarta-bold text-base ${isValid ? 'text-white' : 'text-text-low'}`}>
-              Add Wallet
+              {isSaving ? 'Adding…' : 'Add Wallet'}
             </Text>
           </Pressable>
         </View>

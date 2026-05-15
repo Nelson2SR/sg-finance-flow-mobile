@@ -153,20 +153,45 @@ export interface ApiAccount {
   id: number;
   name: string;
   bank: string;
-  account_type: 'SAVINGS' | 'CREDIT_CARD';
-  balance: number | string;
+  account_name: string;
+  account_type: 'SAVINGS' | 'CREDIT_CARD' | 'UNKNOWN';
   currency: string;
+  /** Mobile-facing wallet category that drives the Home tab carousel
+   * accents. Persisted server-side so a refresh/reinstall doesn't
+   * downgrade every wallet to PERSONAL. */
+  wallet_type: 'PERSONAL' | 'TRIP' | 'FAMILY' | 'CRYPTO';
+  balance: number | string;
+  created_at: string;
+}
+
+export interface CreateAccountPayload {
+  name: string;
+  currency?: string;
+  wallet_type?: 'PERSONAL' | 'TRIP' | 'FAMILY' | 'CRYPTO';
+  bank?: 'DBS' | 'OCBC' | 'UOB' | 'CITI' | 'UNKNOWN';
+  account_type?: 'SAVINGS' | 'CREDIT_CARD' | 'UNKNOWN';
 }
 
 export const financeApi = {
   getAccounts: () => apiClient.get<ApiAccount[]>('/accounts'),
-  getTransactions: (params?: any) => apiClient.get<{ items: ApiTransaction[], total: number }>('/transactions', { params }),
+  createAccount: (data: CreateAccountPayload) =>
+    apiClient.post<ApiAccount>('/accounts', {
+      name: data.name,
+      currency: data.currency ?? 'SGD',
+      wallet_type: data.wallet_type ?? 'PERSONAL',
+      bank: data.bank ?? 'UNKNOWN',
+      account_type: data.account_type ?? 'SAVINGS',
+    }),
+  deleteAccount: (accountId: number) =>
+    apiClient.delete<{ success: boolean; message: string }>(`/accounts/${accountId}`),
+  getTransactions: (params?: any) =>
+    apiClient.get<{ items: ApiTransaction[]; total: number }>('/transactions', { params }),
   confirmUpload: (data: {
-    file_hash: string,
-    bank: string,
-    account_type: string,
-    account_name: string,
-    transactions: any[]
+    file_hash: string;
+    bank: string;
+    account_type: string;
+    account_name: string;
+    transactions: any[];
   }) => apiClient.post('/upload/confirm', data),
 };
 

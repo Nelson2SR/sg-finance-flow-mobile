@@ -175,10 +175,14 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       // mapped these straight through. Coerce defensively here.
       const mappedWallets: Wallet[] = accountsRes.data.map(acc => ({
         id: acc.id.toString(),
-        name: acc.name,
-        type: acc.account_type === 'SAVINGS' ? 'PERSONAL' : 'FAMILY', // Heuristic
+        name: acc.name ?? acc.account_name,
+        // `wallet_type` is the canonical mobile-facing category; only
+        // fall back to the account_type heuristic for rows created
+        // before migration 014.
+        type: (acc.wallet_type as Wallet['type']) ??
+              (acc.account_type === 'SAVINGS' ? 'PERSONAL' : 'FAMILY'),
         balance: Number(acc.balance) || 0,
-        currency: acc.currency
+        currency: acc.currency ?? 'SGD',
       }));
 
       // Anchor transactions to the first real wallet for now — the

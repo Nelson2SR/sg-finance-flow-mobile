@@ -9,6 +9,7 @@ import { useCopilotStore, CopilotPersona } from '../../store/useCopilotStore';
 import { useCategoriesStore } from '../../store/useCategoriesStore';
 import { useAuth } from '../../context/AuthContext';
 import { updateProfile } from '../../services/authService';
+import { useBiometricStore } from '../../lib/biometricLock';
 import { useVaultGroupsStore } from '../../store/useVaultGroupsStore';
 
 const PERSONA_OPTIONS: {
@@ -43,6 +44,8 @@ export default function SettingsScreen() {
   const categoriesCount = useCategoriesStore(s => s.categories.length);
   const labelsCount = useCategoriesStore(s => s.labels.length);
   const { user, accessToken, logout, updateUser } = useAuth();
+  const biometricEnabled = useBiometricStore(s => s.enabled);
+  const setBiometricEnabled = useBiometricStore(s => s.setEnabled);
 
   // Display name: keep a local draft so editing feels instant; sync to
   // /me/profile on blur. Re-seed when `user.display_name` changes (e.g.,
@@ -185,6 +188,18 @@ export default function SettingsScreen() {
               <Switch
                 value={colorScheme === 'dark'}
                 onValueChange={val => setColorScheme(val ? 'dark' : 'light')}
+                trackColor={{ true: '#FF6B4A', false: '#1E212B' }}
+                thumbColor="#fff"
+              />
+            }
+          />
+          <Row
+            icon="finger-print-outline"
+            label="Biometric lock"
+            right={
+              <Switch
+                value={biometricEnabled}
+                onValueChange={(val) => void setBiometricEnabled(val)}
                 trackColor={{ true: '#FF6B4A', false: '#1E212B' }}
                 thumbColor="#fff"
               />

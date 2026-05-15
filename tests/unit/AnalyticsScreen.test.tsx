@@ -84,7 +84,10 @@ describe('AnalyticsScreen', () => {
   it('shows the AmbientAura with the budget cap when at least one budget exists', () => {
     useFinanceStore.setState({
       activeWalletId: 'w1',
-      budgets: [{ id: 'b1', name: 'Monthly', amount: 4000, wallets: 'ALL' }],
+      budgets: [{
+        id: 'b1', name: 'Monthly', amount: 4000, wallets: 'ALL',
+        currency: 'SGD', recurrence: 'MONTHLY',
+      }],
       transactions: [],
     });
     const { getByText } = renderScreen();
@@ -96,7 +99,10 @@ describe('AnalyticsScreen', () => {
   it('handles the over-budget case (ratio >= 1) without crashing', () => {
     useFinanceStore.setState({
       activeWalletId: 'w1',
-      budgets: [{ id: 'b1', name: 'Monthly', amount: 4000, wallets: 'ALL' }],
+      budgets: [{
+        id: 'b1', name: 'Monthly', amount: 4000, wallets: 'ALL',
+        currency: 'SGD', recurrence: 'MONTHLY',
+      }],
       transactions: [
         { id: 't1', walletId: 'w1', type: 'EXPENSE', amount: 9999, category: 'Test', merchant: 'X', date: new Date() },
       ],
