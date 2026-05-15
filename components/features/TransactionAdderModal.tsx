@@ -55,6 +55,7 @@ export function TransactionAdderModal({ visible, onClose }: Props) {
   const handleSave = () => {
     const num = parseFloat(amount);
     if (num <= 0) return;
+    if (!activeWalletId) return;  // modal shouldn't open without an active vault
     // Resolve the picker IDs to their current display names just before
     // saving so any in-flight rename in Vault Config is captured.
     const categoryName =

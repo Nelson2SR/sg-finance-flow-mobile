@@ -47,39 +47,56 @@ const renderScreen = () =>
 
 describe('AnalyticsScreen', () => {
   beforeEach(() => {
-    // Reset to the seeded defaults so each test is deterministic.
-    useFinanceStore.setState({ activeWalletId: 'w1', budgets: [] });
+    // Start every test from the brand-new-user baseline: no wallets,
+    // no budgets, no transactions. Individual tests opt into whatever
+    // state they actually exercise.
+    useFinanceStore.setState({
+      activeWalletId: null,
+      wallets: [],
+      budgets: [],
+      transactions: [],
+    });
   });
 
-  it('renders the header, both charts, and the active-routines section without crashing', () => {
+  it('renders header + cashflow + active-routines for the empty-state user', () => {
     const { getByText } = renderScreen();
     expect(getByText('Analytics')).toBeTruthy();
-    expect(getByText('Safe to Spend')).toBeTruthy();
     expect(getByText('Cashflow Momentum')).toBeTruthy();
     expect(getByText('Active Routines')).toBeTruthy();
+    // Empty-state CTA replaces the aura until a budget is created.
+    expect(getByText('No budgets yet')).toBeTruthy();
   });
 
-  it('shows the income and spend totals on the cashflow card', () => {
-    // Seeded store has one EXPENSE of 2499 and one EXPENSE of 45 and one
-    // INCOME of 8000. The screen sums across all wallets for this card.
+  it('shows the income and spend totals on the cashflow card when transactions exist', () => {
+    useFinanceStore.setState({
+      activeWalletId: 'w1',
+      transactions: [
+        { id: 't1', walletId: 'w1', type: 'EXPENSE', amount: 2499, category: 'X', merchant: 'A', date: new Date() },
+        { id: 't2', walletId: 'w1', type: 'EXPENSE', amount: 45, category: 'X', merchant: 'B', date: new Date() },
+        { id: 't3', walletId: 'w1', type: 'INCOME', amount: 8000, category: 'Y', merchant: 'C', date: new Date() },
+      ],
+    });
     const { getByText } = renderScreen();
     expect(getByText('$8,000')).toBeTruthy(); // income label
     expect(getByText('$2,544')).toBeTruthy(); // spend label (2499 + 45)
   });
 
-  it('handles the zero-spend case in AmbientAura (no degenerate arc)', () => {
-    useFinanceStore.setState({ transactions: [], activeWalletId: 'w1', budgets: [] });
-    const { getByText, queryByText } = renderScreen();
-    // With no spend and the default 4000 cap, remaining === full cap.
+  it('shows the AmbientAura with the budget cap when at least one budget exists', () => {
+    useFinanceStore.setState({
+      activeWalletId: 'w1',
+      budgets: [{ id: 'b1', name: 'Monthly', amount: 4000, wallets: 'ALL' }],
+      transactions: [],
+    });
+    const { getByText } = renderScreen();
+    // No spend → remaining === full cap (formatted with no thousands sep).
     expect(getByText('$4000')).toBeTruthy();
-    // Sanity: the Safe-to-Spend label is still there (component didn't bail).
-    expect(queryByText('Safe to Spend')).toBeTruthy();
+    expect(getByText('Safe to Spend')).toBeTruthy();
   });
 
   it('handles the over-budget case (ratio >= 1) without crashing', () => {
     useFinanceStore.setState({
       activeWalletId: 'w1',
-      budgets: [],
+      budgets: [{ id: 'b1', name: 'Monthly', amount: 4000, wallets: 'ALL' }],
       transactions: [
         { id: 't1', walletId: 'w1', type: 'EXPENSE', amount: 9999, category: 'Test', merchant: 'X', date: new Date() },
       ],

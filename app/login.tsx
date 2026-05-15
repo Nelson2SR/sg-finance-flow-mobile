@@ -22,6 +22,7 @@ import { useThemeColors } from '../hooks/use-theme-colors';
 import {
   loginWithWeChat,
   requestPhoneOtp,
+  signupPhoneOtp,
   verifyPhoneOtp,
 } from '../services/authService';
 
@@ -113,6 +114,44 @@ export default function LoginScreen() {
     }
   };
 
+  // Web doesn't render Alert.alert action buttons; fall back to confirm().
+  // On native, Alert.alert is the standard prompt UX.
+  const confirmCreateAccount = (): Promise<boolean> => {
+    if (Platform.OS === 'web') {
+      const ok = typeof window !== 'undefined'
+        ? window.confirm(`No account exists for ${phone}. Create one?`)
+        : false;
+      return Promise.resolve(ok);
+    }
+    return new Promise((resolve) => {
+      Alert.alert(
+        'No account found',
+        `No account exists for ${phone}. Create one with this number?`,
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Create account', style: 'default', onPress: () => resolve(true) },
+        ],
+        { cancelable: true, onDismiss: () => resolve(false) },
+      );
+    });
+  };
+
+  const completeSignup = async (signupToken: string) => {
+    setIsBusy(true);
+    try {
+      const resp = await signupPhoneOtp(signupToken);
+      await login(resp);
+      router.replace('/new-profile');
+    } catch (err: any) {
+      Alert.alert(
+        'Could not create account',
+        describeAuthError(err, 'Please try again or use a different number.'),
+      );
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   // ── Phone: step 2 — verify OTP ─────────────────────────────────────────
   const handleVerifyOtp = async () => {
     if (otp.length < 4) {
@@ -122,8 +161,23 @@ export default function LoginScreen() {
     setIsBusy(true);
     try {
       const resp = await verifyPhoneOtp(phone, otp);
-      await login(resp);
-      router.replace('/(tabs)');
+      if (resp.user_exists) {
+        await login({
+          access_token: resp.access_token,
+          refresh_token: resp.refresh_token,
+          token_type: resp.token_type,
+          user: resp.user,
+        });
+        router.replace('/(tabs)');
+        return;
+      }
+      // The OTP was correct but no account exists for this phone yet.
+      // Server has minted a signed signup_token (5 min TTL); confirm
+      // with the user, then POST it to /auth/phone/signup. We do NOT
+      // re-send the OTP — Twilio verifications are single-use.
+      setIsBusy(false);
+      const ok = await confirmCreateAccount();
+      if (ok) await completeSignup(resp.signup_token);
     } catch (err: any) {
       Alert.alert(
         'Verification failed',

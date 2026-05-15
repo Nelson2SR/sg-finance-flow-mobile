@@ -61,8 +61,13 @@ export default function AnalyticsScreen() {
   const budgets = useFinanceStore(s => s.budgets);
   const [budgetModalVisible, setBudgetModalVisible] = useState(false);
 
-  const activeBudgets = budgets.filter(b => b.wallets === 'ALL' || b.wallets.includes(activeWalletId));
-  const globalBudgetCap = activeBudgets.length > 0 ? activeBudgets.reduce((a, b) => a + b.amount, 0) : 4000;
+  const activeBudgets = budgets.filter(
+    b => b.wallets === 'ALL' || (activeWalletId !== null && b.wallets.includes(activeWalletId)),
+  );
+  // No magic fallback: when the user has no budgets, the aura collapses
+  // to the empty track and we render a CTA instead of pretending there's
+  // a 4k cap.
+  const globalBudgetCap = activeBudgets.reduce((a, b) => a + b.amount, 0);
 
   const currentSpendRaw = transactions
     .filter(t => t.type === 'EXPENSE' && (activeBudgets.length > 0 ? true : t.walletId === activeWalletId))
@@ -103,7 +108,18 @@ export default function AnalyticsScreen() {
         }}
         showsVerticalScrollIndicator={false}>
         <GradientCard padding="lg" accent="coral" className="mb-8 items-center">
-          <AmbientAura overallLimit={globalBudgetCap} currentSpend={currentSpendRaw} />
+          {activeBudgets.length > 0 ? (
+            <AmbientAura overallLimit={globalBudgetCap} currentSpend={currentSpendRaw} />
+          ) : (
+            <View className="items-center justify-center py-12 px-6">
+              <Text className="font-jakarta-bold text-text-low tracking-widest text-[10px] uppercase mb-2">
+                No budgets yet
+              </Text>
+              <Text className="font-jakarta text-text-mid text-sm text-center leading-relaxed">
+                Tap “New Budget” to set a monthly cap and start tracking your safe-to-spend.
+              </Text>
+            </View>
+          )}
         </GradientCard>
 
         <GradientCard padding="lg" className="mb-8">
@@ -212,22 +228,15 @@ export default function AnalyticsScreen() {
         </View>
 
         <Text className="font-jakarta-bold text-text-high text-xl mb-5">Subscription Drains</Text>
-        <GradientCard padding="md" radius="row">
-          <View className="flex-row justify-between items-center">
-            <View className="flex-row items-center gap-4">
-              <View
-                className="w-11 h-11 rounded-2xl bg-surface-3 justify-center items-center"
-                style={{ borderWidth: 1, borderColor: themeColors.hairline }}>
-                <Ionicons name="videocam-outline" size={18} color="#FF5C7C" />
-              </View>
-              <View>
-                <Text className="font-jakarta-bold text-text-high text-base">Netflix Standard</Text>
-                <Text className="font-jakarta-bold text-accent-rose text-[10px] uppercase tracking-widest mt-1">
-                  Renews in 3 days
-                </Text>
-              </View>
-            </View>
-            <Text className="font-jakarta-bold text-text-high text-base">-$15.99</Text>
+        <GradientCard padding="lg" radius="row">
+          <View className="items-center py-2">
+            <Ionicons name="repeat-outline" size={22} color={themeColors.textLow} />
+            <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mt-2 mb-1">
+              Coming soon
+            </Text>
+            <Text className="font-jakarta text-text-mid text-xs text-center leading-relaxed px-2">
+              Recurring charges will surface here once we detect them in your imported activity.
+            </Text>
           </View>
         </GradientCard>
       </ScrollView>

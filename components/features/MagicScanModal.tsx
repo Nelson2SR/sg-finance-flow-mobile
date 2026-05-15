@@ -231,7 +231,7 @@ export const MagicScanReviewModal = ({
                   }
                   className={`bg-accent-coral py-4 rounded-full items-center ${selectedIndices.length === 0 ? 'opacity-50' : ''}`}>
                   <Text className="font-jakarta-bold text-white tracking-widest uppercase text-xs">
-                    Commit {selectedIndices.length} to Vault
+                    Commit {selectedIndices.length} to Wallet
                   </Text>
                 </Pressable>
               </View>

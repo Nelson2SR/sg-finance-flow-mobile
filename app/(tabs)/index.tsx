@@ -121,7 +121,7 @@ export default function HomeScreen() {
 
   const extendedWallets = [
     ...wallets,
-    { id: 'NEW_VAULT_TRIGGER', name: 'Add Vault', type: 'NEW', balance: 0, currency: '' },
+    { id: 'NEW_VAULT_TRIGGER', name: 'Add Wallet', type: 'NEW', balance: 0, currency: '' },
   ];
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -158,9 +158,15 @@ export default function HomeScreen() {
   };
 
   const confirmScan = async (scannedTransactions: ScannedTransaction[]) => {
+    if (!activeWalletId) {
+      Alert.alert('No wallet yet', 'Create a wallet before importing transactions.');
+      setScanModalVisible(false);
+      return;
+    }
+    const targetWalletId = activeWalletId;
     const { added, skipped } = addTransactionsBatch(
       scannedTransactions.map(tx => ({
-        walletId: activeWalletId,
+        walletId: targetWalletId,
         merchant: tx.merchant,
         amount: tx.amount,
         category: tx.category,
@@ -176,9 +182,9 @@ export default function HomeScreen() {
 
     if (skipped > 0) {
       Alert.alert(
-        added.length === 0 ? 'Already in Vault' : 'Duplicates Skipped',
+        added.length === 0 ? 'Already in Wallet' : 'Duplicates Skipped',
         added.length === 0
-          ? `All ${skipped} scanned ${skipped === 1 ? 'transaction was' : 'transactions were'} already in your vault. Nothing was added.`
+          ? `All ${skipped} scanned ${skipped === 1 ? 'transaction was' : 'transactions were'} already in your wallet. Nothing was added.`
           : `Added ${added.length} new ${added.length === 1 ? 'transaction' : 'transactions'}. Skipped ${skipped} that already existed.`,
       );
     }
@@ -229,7 +235,7 @@ export default function HomeScreen() {
             className="justify-center items-center bg-surface-2/40">
             <Ionicons name="add-circle-outline" size={36} color={themeColors.textLow} />
             <Text className="font-jakarta-bold text-text-low tracking-widest uppercase text-xs mt-3">
-              Provision Vault
+              Add Wallet
             </Text>
           </Pressable>
         </View>
@@ -262,7 +268,7 @@ export default function HomeScreen() {
                   <Text
                     className="font-jakarta-bold tracking-widest text-[10px] uppercase mb-1.5"
                     style={{ color: tint }}>
-                    {item.type} VAULT
+                    {item.type} WALLET
                   </Text>
                   <Text className="font-jakarta-bold text-text-high text-lg">{item.name}</Text>
                 </View>
@@ -376,7 +382,28 @@ export default function HomeScreen() {
             hierarchy is preserved by intensity. */}
         <View className="flex-row gap-3 px-6 mb-10">
           <Pressable
-            onPress={() => setModalVisible(true)}
+            onPress={() => {
+              // No active wallet means TransactionAdderModal can't
+              // actually save (it short-circuits on null walletId). Stop
+              // the user from typing into a dead-end modal and offer the
+              // wallet-creation flow instead.
+              if (!activeWalletId) {
+                Alert.alert(
+                  'No wallet yet',
+                  'Add a wallet first — entries need a wallet to live in.',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Add Wallet',
+                      style: 'default',
+                      onPress: () => setVaultModalVisible(true),
+                    },
+                  ],
+                );
+                return;
+              }
+              setModalVisible(true);
+            }}
             className="flex-row items-center justify-center gap-2 rounded-full py-3.5 active:scale-95 transition-all"
             style={{
               flex: 1,
@@ -403,7 +430,7 @@ export default function HomeScreen() {
           <TrendChart />
 
           <View className="flex-row justify-between items-center mb-5">
-            <Text className="font-jakarta-bold text-text-high text-xl">Vault Activity</Text>
+            <Text className="font-jakarta-bold text-text-high text-xl">Wallet Activity</Text>
             <Pressable onPress={() => router.push('/(tabs)/transactions')}>
               <Text className="font-jakarta-bold text-accent-coral tracking-wide">See All</Text>
             </Pressable>
@@ -414,7 +441,7 @@ export default function HomeScreen() {
               <View className="items-center justify-center py-6">
                 <Ionicons name="leaf-outline" size={28} color={themeColors.textLow} />
                 <Text className="font-jakarta-bold text-text-low text-sm mt-3">
-                  No activity in this vault.
+                  No activity in this wallet.
                 </Text>
               </View>
             </GradientCard>

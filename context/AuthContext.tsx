@@ -28,6 +28,9 @@ interface AuthContextType {
   login: (resp: AuthResponse) => Promise<void>;
   /** Revoke server-side and wipe local tokens. Defaults to single-device logout. */
   logout: (opts?: { allDevices?: boolean }) => Promise<void>;
+  /** Replace the in-memory user without re-issuing tokens. Used after
+   * profile edits so dependent UIs (settings header, etc.) update. */
+  updateUser: (user: AuthUser) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -169,6 +172,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAuthenticated: !!accessToken,
         login,
         logout,
+        updateUser: setUser,
       }}>
       {children}
     </AuthContext.Provider>

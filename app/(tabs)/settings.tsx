@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, View, Text, Switch, ScrollView, TextInput, Platform, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
@@ -8,6 +8,8 @@ import { useThemeColors } from '../../hooks/use-theme-colors';
 import { useCopilotStore, CopilotPersona } from '../../store/useCopilotStore';
 import { useCategoriesStore } from '../../store/useCategoriesStore';
 import { useAuth } from '../../context/AuthContext';
+import { updateProfile } from '../../services/authService';
+import { useVaultGroupsStore } from '../../store/useVaultGroupsStore';
 
 const PERSONA_OPTIONS: {
   id: CopilotPersona;
@@ -40,12 +42,53 @@ export default function SettingsScreen() {
   const togglePersona = useCopilotStore(s => s.togglePersona);
   const categoriesCount = useCategoriesStore(s => s.categories.length);
   const labelsCount = useCategoriesStore(s => s.labels.length);
-  const { user, logout } = useAuth();
-  const [profile, setProfile] = useState({
-    name: 'Surong',
-    gender: 'Female',
-    birthday: '1994-11-22',
-  });
+  const { user, accessToken, logout, updateUser } = useAuth();
+
+  // Display name: keep a local draft so editing feels instant; sync to
+  // /me/profile on blur. Re-seed when `user.display_name` changes (e.g.,
+  // after onboarding completes or a refresh from elsewhere).
+  const fallbackName = user?.display_name ?? '';
+  const [nameDraft, setNameDraft] = useState(fallbackName);
+  const [savingName, setSavingName] = useState(false);
+  useEffect(() => {
+    setNameDraft(user?.display_name ?? '');
+  }, [user?.display_name]);
+
+  const displayInitials = (user?.display_name || '?').substring(0, 2).toUpperCase();
+  const headerName = user?.display_name?.trim() || `User #${user?.id ?? '?'}`;
+
+  const commitName = async () => {
+    const trimmed = nameDraft.trim();
+    if (!accessToken) return;
+    if (trimmed === (user?.display_name ?? '').trim()) return;
+    if (trimmed.length < 1 || trimmed.length > 64) {
+      Alert.alert('Invalid name', 'Display name must be 1–64 characters.');
+      setNameDraft(user?.display_name ?? '');
+      return;
+    }
+    setSavingName(true);
+    try {
+      const updated = await updateProfile(accessToken, { display_name: trimmed });
+      updateUser({
+        id: updated.id,
+        display_name: updated.display_name,
+        avatar_url: updated.avatar_url,
+        email: updated.email,
+      });
+      // Backend may have renamed the default "My Vault" — keep the
+      // local store in sync so the home tab updates without a reload.
+      await useVaultGroupsStore.getState().syncFromBackend().catch(() => {});
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      Alert.alert(
+        'Could not save name',
+        typeof detail === 'string' ? detail : 'Please try again.',
+      );
+      setNameDraft(user?.display_name ?? '');
+    } finally {
+      setSavingName(false);
+    }
+  };
 
   // Row used inside the profile + preferences cards. Keeps spacing and
   // border-bottom consistent across both.
@@ -98,21 +141,16 @@ export default function SettingsScreen() {
               className="w-20 h-20 rounded-full bg-accent-coral justify-center items-center"
               style={{ boxShadow: '0 0 24px rgba(255, 107, 74, 0.5)' }}>
               <Text className="font-jakarta-bold text-white text-2xl tracking-widest uppercase">
-                {profile.name.substring(0, 2)}
+                {displayInitials}
               </Text>
             </View>
             <View className="flex-1">
-              <Text className="font-jakarta-bold text-text-high text-2xl mb-2">
-                {profile.name}
+              <Text className="font-jakarta-bold text-text-high text-2xl mb-1">
+                {headerName}
               </Text>
-              <View
-                className="px-3 py-1.5 rounded-full flex-row items-center gap-2 self-start"
-                style={{ backgroundColor: 'rgba(255, 181, 71, 0.16)', borderWidth: 1, borderColor: 'rgba(255, 181, 71, 0.35)' }}>
-                <Ionicons name="flame" size={12} color="#FFB547" />
-                <Text className="font-jakarta-bold text-accent-amber text-[10px] uppercase tracking-widest">
-                  30 Day Streak
-                </Text>
-              </View>
+              <Text className="font-jakarta text-text-low text-xs">
+                Account #{user?.id ?? '?'}
+              </Text>
             </View>
           </View>
         </GradientCard>
@@ -122,54 +160,21 @@ export default function SettingsScreen() {
             label="Display Name"
             right={
               <TextInput
-                className="text-text-high font-jakarta-bold text-sm text-right"
-                value={profile.name}
-                onChangeText={t => setProfile({ ...profile, name: t })}
+                className="text-text-high font-jakarta-bold text-sm text-right min-w-[120px]"
+                value={nameDraft}
+                onChangeText={setNameDraft}
+                onBlur={commitName}
+                onSubmitEditing={commitName}
+                maxLength={64}
+                returnKeyType="done"
+                editable={!savingName}
+                placeholder="Add a name"
                 placeholderTextColor={themeColors.textDim}
               />
-            }
-          />
-          <Row
-            label="Gender"
-            right={
-              <Text className="font-jakarta-bold text-text-high text-sm">{profile.gender}</Text>
-            }
-          />
-          <Row
-            label="Birthday"
-            right={
-              <Text className="font-jakarta-bold text-text-high text-sm">{profile.birthday}</Text>
             }
             last
           />
         </GradientCard>
-
-        <Text className="font-jakarta-bold text-text-high text-xl mb-5">Trophy Room</Text>
-        <View className="flex-row gap-3 mb-8">
-          <GradientCard padding="none" radius="row" style={{ width: 100, height: 116 }}>
-            <View className="flex-1 items-center justify-center">
-              <Ionicons name="trophy" size={28} color="#FFB547" />
-              <Text className="font-jakarta-bold text-accent-amber text-[9px] text-center mt-3 uppercase tracking-widest px-2">
-                Savings Elite
-              </Text>
-            </View>
-          </GradientCard>
-          <View
-            className="items-center justify-center opacity-60"
-            style={{
-              width: 100,
-              height: 116,
-              borderStyle: 'dashed',
-              borderWidth: 1.5,
-              borderColor: themeColors.textDim,
-              borderRadius: 16,
-            }}>
-            <Ionicons name="lock-closed-outline" size={24} color={themeColors.textLow} />
-            <Text className="font-jakarta-bold text-text-low text-[9px] text-center mt-3 uppercase tracking-widest">
-              Locked
-            </Text>
-          </View>
-        </View>
 
         <Text className="font-jakarta-bold text-text-high text-xl mb-5">Preferences</Text>
         <GradientCard padding="none" className="mb-8 overflow-hidden">
@@ -186,26 +191,12 @@ export default function SettingsScreen() {
             }
           />
           <Row
-            icon="finger-print-outline"
-            label="Biometrics"
-            right={
-              <Switch
-                value={true}
-                trackColor={{ true: '#FF6B4A', false: '#1E212B' }}
-                thumbColor="#fff"
-              />
-            }
-          />
-          <Row
             icon="cash-outline"
             label="Currency"
             right={
-              <View className="flex-row items-center gap-1">
-                <Text className="font-jakarta-bold text-text-low text-xs uppercase tracking-widest">
-                  SGD
-                </Text>
-                <Ionicons name="chevron-forward" size={12} color={themeColors.textLow} />
-              </View>
+              <Text className="font-jakarta-bold text-text-low text-xs uppercase tracking-widest">
+                SGD
+              </Text>
             }
             last
           />

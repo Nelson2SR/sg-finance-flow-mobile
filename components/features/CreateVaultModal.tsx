@@ -46,7 +46,7 @@ export const CreateVaultModal = ({ visible, onClose }: Props) => {
           className="bg-surface-1 rounded-t-[40px] px-6 pt-6 pb-12"
           style={{ borderTopWidth: 1, borderTopColor: themeColors.hairline }}>
           <View className="flex-row justify-between items-center mb-8">
-            <Text className="font-jakarta-bold text-text-high text-2xl">New Vault</Text>
+            <Text className="font-jakarta-bold text-text-high text-2xl">New Wallet</Text>
             <Pressable
               onPress={onClose}
               className="w-9 h-9 rounded-full bg-surface-2 border border-hairline justify-center items-center">
@@ -55,7 +55,7 @@ export const CreateVaultModal = ({ visible, onClose }: Props) => {
           </View>
 
           <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-2">
-            Vault Name
+            Wallet Name
           </Text>
           <TextInput
             className={`bg-surface-2 px-4 py-4 rounded-2xl text-text-high text-base font-jakarta-bold mb-6 border ${nameFocused ? 'border-accent-coral' : 'border-hairline'}`}
@@ -69,7 +69,7 @@ export const CreateVaultModal = ({ visible, onClose }: Props) => {
           />
 
           <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-2">
-            Vault Type
+            Wallet Type
           </Text>
           <View className="flex-row flex-wrap gap-3 mb-10">
             {TYPES.map(t => {
@@ -98,7 +98,7 @@ export const CreateVaultModal = ({ visible, onClose }: Props) => {
             className={`py-4 rounded-full items-center active:scale-95 ${isValid ? 'bg-accent-coral' : 'bg-surface-3'}`}>
             <Text
               className={`font-jakarta-bold text-base ${isValid ? 'text-white' : 'text-text-low'}`}>
-              Provision Vault
+              Add Wallet
             </Text>
           </Pressable>
         </View>

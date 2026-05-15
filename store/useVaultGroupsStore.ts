@@ -20,6 +20,7 @@ import {
   ApiInvitePreview,
   ApiVaultGroup,
   groupsApi,
+  registerActiveVaultGroupGetter,
 } from '../services/apiClient';
 
 export type GroupRole = 'OWNER' | 'MEMBER';
@@ -93,7 +94,16 @@ export const useVaultGroupsStore = create<VaultGroupsStore>((set, get) => ({
     return inflightSync;
   },
 
-  setActiveGroup: (groupId) => set({ activeGroupId: groupId }),
+  setActiveGroup: (groupId) => {
+    const prev = get().activeGroupId;
+    if (prev === groupId) return;
+    set({ activeGroupId: groupId });
+    // Wallets, transactions, categories, labels and rules are all
+    // group-scoped server-side now. Clear the local view so we don't
+    // show the previous group's rows for the half-second before the
+    // refetch lands, then trigger a refresh.
+    void resetGroupScopedCaches();
+  },
 
   setPendingInvite: (code) => set({ pendingInviteCode: code }),
 
@@ -186,3 +196,37 @@ export const useVaultGroupsStore = create<VaultGroupsStore>((set, get) => ({
     }));
   },
 }));
+
+// Make the active group id visible to the axios request interceptor in
+// apiClient.ts so every authenticated request carries an X-Vault-Group-Id
+// header. Reading via getState() — not a subscription — keeps the auth
+// layer free of React-only hooks.
+registerActiveVaultGroupGetter(() => useVaultGroupsStore.getState().activeGroupId);
+
+/**
+ * Invalidate every group-scoped local cache when the user switches
+ * which group they're operating in. Defer the imports to break the
+ * circular dependency that would otherwise form between the vault
+ * groups store and the finance / categories stores (both of which
+ * import groupsApi for their own sync paths).
+ */
+async function resetGroupScopedCaches(): Promise<void> {
+  try {
+    const { useFinanceStore } = await import('./useFinanceStore');
+    useFinanceStore.setState({
+      wallets: [],
+      transactions: [],
+      budgets: [],
+      activeWalletId: null,
+    });
+    void useFinanceStore.getState().syncData();
+  } catch (err) {
+    console.warn('[VaultGroups] finance reset failed', err);
+  }
+  try {
+    const { useCategoriesStore } = await import('./useCategoriesStore');
+    void useCategoriesStore.getState().syncFromBackend();
+  } catch (err) {
+    console.warn('[VaultGroups] categories reset failed', err);
+  }
+}

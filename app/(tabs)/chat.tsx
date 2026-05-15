@@ -311,9 +311,15 @@ export default function ChatCopilotScreen() {
   };
 
   const confirmScan = (data: ScannedTransaction[]) => {
+    if (!activeWalletId) {
+      Alert.alert('No wallet yet', 'Create a wallet before importing transactions.');
+      setScanModalVisible(false);
+      return;
+    }
+    const targetWalletId = activeWalletId;
     const { added, skipped } = addTransactionsBatch(
       data.map(item => ({
-        walletId: activeWalletId,
+        walletId: targetWalletId,
         merchant: item.merchant,
         amount: item.amount,
         category: item.category,
@@ -326,11 +332,11 @@ export default function ChatCopilotScreen() {
     setScanModalVisible(false);
     let text: string;
     if (added.length === 0) {
-      text = `Looks like all ${skipped} ${skipped === 1 ? 'entry was' : 'entries were'} already in your vault — nothing new to add.`;
+      text = `Looks like all ${skipped} ${skipped === 1 ? 'entry was' : 'entries were'} already in your wallet — nothing new to add.`;
     } else if (skipped > 0) {
-      text = `Parsed ${added.length} new ${added.length === 1 ? 'entry' : 'entries'} and skipped ${skipped} duplicates already in your vault. Safe-to-Spend updated.`;
+      text = `Parsed ${added.length} new ${added.length === 1 ? 'entry' : 'entries'} and skipped ${skipped} duplicates already in your wallet. Safe-to-Spend updated.`;
     } else {
-      text = `Done — added ${added.length} ${added.length === 1 ? 'entry' : 'entries'} to your vault. Safe-to-Spend updated.`;
+      text = `Done — added ${added.length} ${added.length === 1 ? 'entry' : 'entries'} to your wallet. Safe-to-Spend updated.`;
     }
     // Speaker for scan confirmation: advisor if present, otherwise first
     // enabled persona.

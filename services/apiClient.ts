@@ -18,11 +18,35 @@ export const apiClient = axios.create({
   },
 });
 
-// ── Token injection ──────────────────────────────────────────────────────
+// ── Token + active vault group injection ─────────────────────────────────
+//
+// Two stamps on every authenticated request:
+//   1. Authorization: Bearer <access_token>   (who you are)
+//   2. X-Vault-Group-Id: <activeGroupId>      (which group you're operating in)
+//
+// The active group is held in useVaultGroupsStore. We dereference it lazily
+// inside the interceptor (not at module-load) so the latest user selection
+// is sent on each request — if the user switches groups, the very next
+// request goes to the new one. Auth endpoints (/auth/*) don't need or want
+// the header, so we skip it for those.
+let activeVaultGroupIdGetter: () => number | null = () => null;
+export function registerActiveVaultGroupGetter(fn: () => number | null): void {
+  activeVaultGroupIdGetter = fn;
+}
+
 apiClient.interceptors.request.use(async (config) => {
   const token = await getAccessToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+  }
+
+  const url = config.url ?? '';
+  const isAuthRoute = url.startsWith('/auth/') || url === '/auth';
+  if (!isAuthRoute) {
+    const groupId = activeVaultGroupIdGetter();
+    if (groupId !== null && groupId !== undefined) {
+      config.headers['X-Vault-Group-Id'] = String(groupId);
+    }
   }
   return config;
 });

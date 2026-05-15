@@ -57,14 +57,35 @@ describe('requestPhoneOtp', () => {
 });
 
 describe('verifyPhoneOtp', () => {
-  it('POSTs phone + otp to /auth/phone/verify', async () => {
-    mockedAxios.post.mockResolvedValueOnce({ data: sampleAuthResponse });
+  it('POSTs phone + otp to /auth/phone/verify and returns the login branch when user_exists', async () => {
+    mockedAxios.post.mockResolvedValueOnce({
+      data: { user_exists: true, ...sampleAuthResponse },
+    });
     const got = await verifyPhoneOtp('+6591234567', '000000');
     expect(mockedAxios.post).toHaveBeenCalledWith(
       'http://localhost:8000/api/v1/auth/phone/verify',
       { phone: '+6591234567', otp: '000000' },
     );
-    expect(got.user.id).toBe(1);
+    expect(got.user_exists).toBe(true);
+    if (got.user_exists) {
+      expect(got.user.id).toBe(1);
+    }
+  });
+
+  it('returns the signup branch when user_exists is false', async () => {
+    mockedAxios.post.mockResolvedValueOnce({
+      data: {
+        user_exists: false,
+        signup_token: 'jwt.signup.token',
+        phone: '+6591234567',
+      },
+    });
+    const got = await verifyPhoneOtp('+6591234567', '000000');
+    expect(got.user_exists).toBe(false);
+    if (!got.user_exists) {
+      expect(got.signup_token).toBe('jwt.signup.token');
+      expect(got.phone).toBe('+6591234567');
+    }
   });
 });
 

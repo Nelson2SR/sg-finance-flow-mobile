@@ -47,12 +47,71 @@ export async function requestPhoneOtp(phone: string): Promise<void> {
 }
 
 /**
- * Verify a 6-digit OTP. Returns the auth pair on success.
+ * Discriminated response from `POST /auth/phone/verify`. The backend
+ * does the one-and-only Twilio check there (verifications are
+ * single-use), and forks based on whether a user row exists:
+ *
+ *   user_exists=true  → access_token / refresh_token / user are set;
+ *                       the client should `login(resp)` and route to
+ *                       /(tabs).
+ *   user_exists=false → signup_token / phone are set; the client
+ *                       should confirm with the user, then POST to
+ *                       /auth/phone/signup with the signup_token.
+ */
+export interface PhoneVerifyExistingUser {
+  user_exists: true;
+  access_token: string;
+  refresh_token: string;
+  token_type: 'bearer';
+  user: AuthUser;
+}
+export interface PhoneVerifyNewUser {
+  user_exists: false;
+  signup_token: string;
+  phone: string;
+}
+export type PhoneVerifyResponse = PhoneVerifyExistingUser | PhoneVerifyNewUser;
+
+/**
+ * Verify a 6-digit OTP. Always one network call → one Twilio check.
+ * Inspect `user_exists` on the response to decide login vs signup.
+ *
  * In dev (no Twilio configured backend-side), the stub provider
  * accepts the fixed code `000000` for any valid E.164 phone.
  */
-export async function verifyPhoneOtp(phone: string, otp: string): Promise<AuthResponse> {
-  const resp = await axios.post<AuthResponse>(`${BASE_URL}/auth/phone/verify`, { phone, otp });
+export async function verifyPhoneOtp(phone: string, otp: string): Promise<PhoneVerifyResponse> {
+  const resp = await axios.post<PhoneVerifyResponse>(
+    `${BASE_URL}/auth/phone/verify`,
+    { phone, otp },
+  );
+  return resp.data;
+}
+
+/**
+ * Finish signup with the signup_token returned by `verifyPhoneOtp`.
+ * No OTP is re-sent — the backend has already verified it. Returns
+ * a brand-new auth pair (user.display_name=null; route to onboarding).
+ */
+export async function signupPhoneOtp(signupToken: string): Promise<AuthResponse> {
+  const resp = await axios.post<AuthResponse>(`${BASE_URL}/auth/phone/signup`, {
+    signup_token: signupToken,
+  });
+  return resp.data;
+}
+
+/**
+ * Patch the signed-in user's profile. Sends an authenticated PATCH to
+ * `/me/profile`. `accessToken` must be provided because this is called
+ * during onboarding, before AuthContext has finished hydrating into the
+ * apiClient interceptor.
+ */
+export async function updateProfile(
+  accessToken: string,
+  patch: { display_name?: string; avatar_url?: string },
+): Promise<AuthUser> {
+  const resp = await axios.patch<AuthUser>(`${BASE_URL}/me/profile`, patch, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
   return resp.data;
 }
 

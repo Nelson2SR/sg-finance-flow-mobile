@@ -149,6 +149,10 @@ function RootLayoutNav() {
     <ThemeProvider value={isDark ? DarkTheme : DefaultTheme}>
       <Stack>
         <Stack.Screen name="login" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="new-profile"
+          options={{ headerShown: false, gestureEnabled: false }}
+        />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         {/* Vault Config CRUD — pushed from Settings. Headerless because

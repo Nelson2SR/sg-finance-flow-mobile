@@ -43,7 +43,10 @@ export interface Transaction {
 }
 
 interface FinanceState {
-  activeWalletId: string;
+  /** `null` before the first sync completes or when the user has no
+   * wallets. Callers must guard against this; the older `string`-only
+   * shape implicitly assumed a seeded `w1`. */
+  activeWalletId: string | null;
   wallets: Wallet[];
   budgets: Budget[];
   transactions: Transaction[];
@@ -86,21 +89,16 @@ const txSignature = (tx: {
 
 
 export const useFinanceStore = create<FinanceState>((set, get) => ({
-  activeWalletId: 'w1',
+  // Empty until `syncData` populates from the backend. A brand-new user
+  // with no bank accounts sees a true empty state rather than fake
+  // wallets/transactions.
+  activeWalletId: null,
 
-  wallets: [
-    { id: 'w1', name: 'Bank Account', type: 'PERSONAL', balance: 14240.00, currency: 'SGD' },
-    { id: 'w2', name: 'Japan Trip 2026', type: 'TRIP', balance: 450000.00, currency: 'JPY' },
-    { id: 'w3', name: 'Family Vault', type: 'FAMILY', balance: 8000.00, currency: 'SGD' }
-  ],
+  wallets: [],
 
   budgets: [],
 
-  transactions: [
-    { id: 't1', walletId: 'w1', type: 'EXPENSE', amount: 2499.00, category: 'Electronics', merchant: 'Apple Store', date: new Date() },
-    { id: 't2', walletId: 'w1', type: 'EXPENSE', amount: 45.00, category: 'Dining', merchant: 'Makansutra', date: new Date(Date.now() - 86400000) },
-    { id: 't3', walletId: 'w1', type: 'INCOME', amount: 8000.00, category: 'Salary', merchant: 'Deposit', date: new Date(Date.now() - 259200000) },
-  ],
+  transactions: [],
 
   setActiveWallet: (id) => set({ activeWalletId: id }),
 
@@ -183,9 +181,13 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         currency: acc.currency
       }));
 
+      // Anchor transactions to the first real wallet for now — the
+      // backend tx schema doesn't yet carry a foreign key to accounts.
+      // Once the join lands, replace this with the real `account_id`.
+      const defaultWalletId = mappedWallets[0]?.id ?? '';
       const mappedTxs: Transaction[] = txsRes.data.items.map(tx => ({
         id: tx.id.toString(),
-        walletId: 'w1', // Default to first wallet for now
+        walletId: defaultWalletId,
         type: tx.direction === 'CREDIT' ? 'INCOME' : 'EXPENSE',
         amount: Number(tx.amount) || 0,
         category: tx.category,
@@ -197,10 +199,10 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
           Array.isArray(tx.labels) && tx.labels.length > 0 ? tx.labels : undefined,
       }));
 
-      set({ 
-        wallets: mappedWallets.length > 0 ? mappedWallets : get().wallets,
+      set({
+        wallets: mappedWallets,
         transactions: mappedTxs,
-        activeWalletId: mappedWallets[0]?.id || 'w1'
+        activeWalletId: mappedWallets[0]?.id ?? null,
       });
     } catch (error) {
       // Use warn (not error) so RN's LogBox doesn't pop a red banner —
