@@ -260,6 +260,33 @@ export default function SettingsScreen() {
           </Pressable>
         </GradientCard>
 
+        {/* ── Vault Groups ────────────────────────────────────────────
+            Manage shared groups: who's in your active vault, invite
+            new members via a universal link, switch between multiple
+            groups, leave. See PRD 10 + ARCH_VAULT_GROUPS. */}
+        <Text className="font-jakarta-bold text-text-high text-xl mb-1">Vault Groups</Text>
+        <Text className="font-jakarta text-text-low text-xs mb-5 leading-relaxed">
+          Share your transaction view with a partner, parents, or roommates.
+          Each member's activity is stamped with their avatar.
+        </Text>
+        <GradientCard padding="none" className="mb-8 overflow-hidden">
+          <Pressable
+            onPress={() => router.push('/groups')}
+            className="flex-row justify-between items-center p-5 active:bg-surface-3">
+            <View className="flex-row items-center gap-4">
+              <View
+                className="w-9 h-9 rounded-2xl justify-center items-center"
+                style={{ backgroundColor: 'rgba(91, 224, 176, 0.15)' }}>
+                <Ionicons name="people" size={14} color="#5BE0B0" />
+              </View>
+              <Text className="font-jakarta-bold text-text-high text-sm">
+                Manage groups & invites
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={14} color={themeColors.textLow} />
+          </Pressable>
+        </GradientCard>
+
         {/* ── Privacy ──────────────────────────────────────────────────
             Manage on-device bank PDF passwords — see PRD 09 §4.4 / the
             Zero Cloud Lock-in commitment in CLAUDE.md. */}

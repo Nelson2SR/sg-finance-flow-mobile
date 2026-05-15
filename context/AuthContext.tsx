@@ -10,6 +10,7 @@ import {
   getTokens,
   setTokens,
 } from '../lib/secureStore';
+import { useVaultGroupsStore } from '../store/useVaultGroupsStore';
 import { onAuthFailed } from '../services/apiClient';
 import {
   AuthResponse,
@@ -87,6 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(fresh.user);
         setAccessToken(fresh.access_token);
         setRefreshToken(fresh.refresh_token);
+        await bootstrapVaultGroups();
       } catch {
         // Refresh token is dead — wipe and drop to /login.
         await clearTokens();
@@ -106,7 +108,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(resp.user);
     setAccessToken(resp.access_token);
     setRefreshToken(resp.refresh_token);
+    await bootstrapVaultGroups();
   };
+
+  /**
+   * After a successful sign-in / refresh:
+   *   1. sync the Vault Groups list (backend auto-creates a default
+   *      on first login, so this is never empty for an authed user)
+   *   2. if the deep-link handler stashed a pending invite code,
+   *      consume it now → land inside the inviter's group
+   *
+   * Both steps swallow failures: a sync blip shouldn't block the user
+   * from reaching /(tabs). The home tab's own sync-on-mount will
+   * retry. A failed invite consume is mildly surprising but the
+   * code stays cached until the user retries or signs in elsewhere.
+   */
+  async function bootstrapVaultGroups() {
+    const groupsStore = useVaultGroupsStore.getState();
+    try {
+      await groupsStore.syncFromBackend();
+    } catch (err) {
+      console.warn('[Auth] vault groups sync failed', err);
+    }
+    if (groupsStore.pendingInviteCode) {
+      try {
+        await groupsStore.consumeInvite(groupsStore.pendingInviteCode);
+      } catch (err) {
+        console.warn('[Auth] pending invite consume failed', err);
+        // Leave the code cached — user can retry from a banner.
+      }
+    }
+  }
 
   const logout = async (opts?: { allDevices?: boolean }) => {
     if (refreshToken) {

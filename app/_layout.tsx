@@ -17,6 +17,8 @@ import {
 import '../global.css';
 import { AuthProvider } from '../context/AuthContext';
 import { AuthGuard } from '../components/AuthGuard';
+import * as Linking from 'expo-linking';
+import { useVaultGroupsStore } from '../store/useVaultGroupsStore';
 
 
 
@@ -26,7 +28,61 @@ export const unstable_settings = {
   initialRouteName: '(tabs)',
 };
 
+/**
+ * Parse an incoming deep link and, if it carries a Vault Group invite
+ * code, stash it in the store so the next successful sign-in (or
+ * already-authed user) auto-consumes it.
+ *
+ * Accepted shapes:
+ *   sgff://invite/<code>
+ *   https://sgff.app/invite/<code>
+ */
+function extractInviteCode(url: string): string | null {
+  try {
+    const parsed = Linking.parse(url);
+    // Two parse outcomes we care about:
+    //   { hostname: 'invite', path: '<code>' }                       (sgff://invite/<code>)
+    //   { hostname: 'sgff.app', path: 'invite/<code>' }              (universal link)
+    if (parsed.hostname === 'invite' && parsed.path) {
+      return decodeURIComponent(parsed.path).split('/')[0] || null;
+    }
+    if (parsed.path && parsed.path.startsWith('invite/')) {
+      return decodeURIComponent(parsed.path.slice('invite/'.length)).split('/')[0] || null;
+    }
+  } catch {
+    // Malformed URL — silently ignore. Deep links are best-effort.
+  }
+  return null;
+}
+
+function useDeepLinkInviteCapture() {
+  useEffect(() => {
+    const setPendingInvite = useVaultGroupsStore.getState().setPendingInvite;
+    const consumeInvite = useVaultGroupsStore.getState().consumeInvite;
+    const handle = (url: string) => {
+      const code = extractInviteCode(url);
+      if (!code) return;
+      setPendingInvite(code);
+      // If the user is already signed in, fire the consume immediately
+      // — the AuthContext bootstrap only runs on sign-in transitions,
+      // not on warm-app deep-link opens.
+      consumeInvite(code).catch(() => {
+        // Failure is fine — code stays cached for retry.
+      });
+    };
+
+    // Cold-launch case: app was opened by tapping a link.
+    Linking.getInitialURL().then((url) => {
+      if (url) handle(url);
+    });
+
+    const sub = Linking.addEventListener('url', (evt) => handle(evt.url));
+    return () => sub.remove();
+  }, []);
+}
+
 export default function RootLayout() {
+  useDeepLinkInviteCapture();
   return (
 
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -100,6 +156,7 @@ function RootLayoutNav() {
         <Stack.Screen name="categories" options={{ headerShown: false }} />
         <Stack.Screen name="labels" options={{ headerShown: false }} />
         <Stack.Screen name="privacy" options={{ headerShown: false }} />
+        <Stack.Screen name="groups" options={{ headerShown: false }} />
       </Stack>
       <AuthGuard />
       <StatusBar style={isDark ? 'light' : 'dark'} />

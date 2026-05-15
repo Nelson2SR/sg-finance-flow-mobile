@@ -29,6 +29,8 @@ import { DEV_DISABLE_AUTH } from '../../constants/Config';
 import { Surface, SurfaceHeaderArea, GradientCard, NeonButton } from '../../components/ui';
 import { useThemeColors } from '../../hooks/use-theme-colors';
 import { resolveCategoryStyle, tintWithAlpha } from '../../lib/categoryStyle';
+import { AvatarStack } from '../../components/features/AvatarStack';
+import { useVaultGroupsStore } from '../../store/useVaultGroupsStore';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width - 48;
@@ -94,6 +96,13 @@ export default function HomeScreen() {
   const addTransactionsBatch = useFinanceStore(s => s.addTransactionsBatch);
   const syncData = useFinanceStore(s => s.syncData);
   const { isAuthenticated, user } = useAuth();
+  // Vault Group context: drives the avatar stack on the active vault
+  // card (replacing the legacy P1/P2 placeholder dots) and is the
+  // anchor for the upcoming activity-row author badges.
+  const vaultGroups = useVaultGroupsStore(s => s.groups);
+  const activeGroupId = useVaultGroupsStore(s => s.activeGroupId);
+  const activeVaultGroup =
+    vaultGroups.find(g => g.id === activeGroupId) ?? vaultGroups[0] ?? null;
 
   React.useEffect(() => {
     // Skip the backend sync while the dev auth bypass is on — the seeded
@@ -258,20 +267,17 @@ export default function HomeScreen() {
                   <Text className="font-jakarta-bold text-text-high text-lg">{item.name}</Text>
                 </View>
 
-                <View className="flex-row">
-                  <View
-                    className="w-8 h-8 rounded-full justify-center items-center z-20"
-                    style={{ backgroundColor: 'rgba(91, 224, 176, 0.18)', borderWidth: 1, borderColor: 'rgba(91, 224, 176, 0.4)' }}>
-                    <Text className="font-jakarta-bold text-accent-mint text-[10px]">P1</Text>
-                  </View>
-                  {item.type !== 'PERSONAL' && (
-                    <View
-                      className="w-8 h-8 rounded-full justify-center items-center -ml-3 z-10"
-                      style={{ backgroundColor: 'rgba(255, 107, 74, 0.18)', borderWidth: 1, borderColor: 'rgba(255, 107, 74, 0.4)' }}>
-                      <Text className="font-jakarta-bold text-accent-coral text-[10px]">P2</Text>
-                    </View>
-                  )}
-                </View>
+                {/* Vault Group member avatars — replaces the legacy
+                    P1/P2 placeholder dots. Falls back to a single dot
+                    when the active group has one member (solo vault),
+                    or shows nothing if the user is in zero groups. */}
+                {activeVaultGroup && activeVaultGroup.members.length > 0 && (
+                  <AvatarStack
+                    members={activeVaultGroup.members}
+                    size={32}
+                    maxVisible={4}
+                  />
+                )}
               </View>
 
               <View>

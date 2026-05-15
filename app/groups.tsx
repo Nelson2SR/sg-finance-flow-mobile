@@ -1,0 +1,258 @@
+/**
+ * Vault Group manage screen — single-screen MVP for PR-5b.
+ *
+ * Routes:
+ *   /groups   (this file)   — list all groups + invite + create
+ *
+ * Per-group settings (rename, transfer ownership, remove member,
+ * leave) live in a follow-up `/groups/[id]/settings.tsx` that we
+ * defer to PR-5b-next so this PR has a focused surface to ship.
+ *
+ * The "Invite a member" button calls the backend, gets a code, and
+ * opens the native Share sheet with a universal-link URL so the user
+ * can drop it into WeChat / iMessage / WhatsApp. The recipient taps
+ * the link, the app opens, the deep-link handler stashes the code,
+ * and AuthContext auto-consumes it after sign-in.
+ */
+
+import React, { useEffect, useState } from 'react';
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  Share,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+
+import {
+  GradientCard,
+  NeonButton,
+  Surface,
+} from '../components/ui';
+import { AvatarStack } from '../components/features/AvatarStack';
+import { useThemeColors } from '../hooks/use-theme-colors';
+import { useVaultGroupsStore } from '../store/useVaultGroupsStore';
+
+const INVITE_BASE_URL = 'https://sgff.app/invite/';
+
+export default function GroupsScreen() {
+  const router = useRouter();
+  const themeColors = useThemeColors();
+  const groups = useVaultGroupsStore(s => s.groups);
+  const activeGroupId = useVaultGroupsStore(s => s.activeGroupId);
+  const setActiveGroup = useVaultGroupsStore(s => s.setActiveGroup);
+  const syncFromBackend = useVaultGroupsStore(s => s.syncFromBackend);
+  const createGroup = useVaultGroupsStore(s => s.createGroup);
+  const generateInvite = useVaultGroupsStore(s => s.generateInvite);
+  const leaveGroup = useVaultGroupsStore(s => s.leaveGroup);
+
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [busyGroupId, setBusyGroupId] = useState<number | null>(null);
+
+  useEffect(() => {
+    void syncFromBackend();
+  }, [syncFromBackend]);
+
+  const handleInvite = async (groupId: number) => {
+    setBusyGroupId(groupId);
+    try {
+      const { code } = await generateInvite(groupId);
+      const url = INVITE_BASE_URL + code;
+      const group = groups.find(g => g.id === groupId);
+      const groupName = group?.name ?? 'my vault';
+      await Share.share({
+        message: `Join "${groupName}" on SG Finance Flow: ${url}`,
+        url,
+      });
+    } catch (err: any) {
+      Alert.alert(
+        'Could not generate invite',
+        err?.response?.data?.detail ?? 'Please try again.',
+      );
+    } finally {
+      setBusyGroupId(null);
+    }
+  };
+
+  const handleCreate = async () => {
+    const name = newName.trim();
+    if (!name) {
+      Alert.alert('Name required', 'Give the new group a name.');
+      return;
+    }
+    setCreating(true);
+    try {
+      await createGroup(name);
+      setNewName('');
+    } catch (err: any) {
+      Alert.alert(
+        'Could not create group',
+        err?.response?.data?.detail ?? 'Please try again.',
+      );
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const confirmLeave = (groupId: number, name: string, isOwner: boolean) => {
+    if (isOwner) {
+      Alert.alert(
+        'Transfer ownership first',
+        'Owners must hand over the group to another member (or delete the group) before leaving. Member transfer is coming in the next update.',
+      );
+      return;
+    }
+    Alert.alert(
+      `Leave "${name}"?`,
+      "You'll stop seeing this group's shared activity. Your own transactions stay yours.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Leave',
+          style: 'destructive',
+          onPress: async () => {
+            setBusyGroupId(groupId);
+            try {
+              await leaveGroup(groupId);
+            } catch (err: any) {
+              Alert.alert(
+                'Could not leave group',
+                err?.response?.data?.detail ?? 'Please try again.',
+              );
+            } finally {
+              setBusyGroupId(null);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  return (
+    <Surface halo>
+      <SafeAreaView className="flex-1">
+        <View className="flex-row items-center justify-between px-6 pt-2 pb-4">
+          <Pressable
+            onPress={() => router.back()}
+            className="w-10 h-10 rounded-full bg-surface-2 border border-hairline justify-center items-center">
+            <Ionicons name="chevron-back" size={20} color={themeColors.textHigh} />
+          </Pressable>
+          <Text className="font-jakarta-bold text-text-high text-base">Vault Groups</Text>
+          <View className="w-10" />
+        </View>
+
+        <ScrollView className="flex-1 px-6" showsVerticalScrollIndicator={false}>
+          <Text className="font-jakarta text-text-low text-xs mb-5 leading-relaxed">
+            A Vault Group lets you share your transaction view with other people.
+            All members see every member's activity, each row stamped with the
+            author's avatar.
+          </Text>
+
+          {/* ── Group list ──────────────────────────────────────────── */}
+          {groups.length === 0 ? (
+            <GradientCard padding="lg" className="mb-6">
+              <Text className="font-jakarta text-text-low text-sm">
+                You're not in any group yet. Create one below to start inviting
+                people.
+              </Text>
+            </GradientCard>
+          ) : (
+            groups.map((g) => {
+              const isActive = g.id === activeGroupId;
+              const isOwner = g.role === 'OWNER';
+              return (
+                <View key={g.id} className="mb-3">
+                  <GradientCard padding="lg" accent={isActive ? 'coral' : undefined}>
+                    <View className="flex-row justify-between items-start mb-4">
+                      <View className="flex-1 pr-4">
+                        <View className="flex-row items-center gap-2 mb-1">
+                          <Text className="font-jakarta-bold text-text-high text-base">
+                            {g.emoji ? `${g.emoji}  ` : ''}{g.name}
+                          </Text>
+                          {isActive && (
+                            <View
+                              className="px-2 py-0.5 rounded-full"
+                              style={{ backgroundColor: 'rgba(255, 107, 74, 0.18)' }}>
+                              <Text className="font-jakarta-bold text-accent-coral text-[9px] uppercase tracking-widest">
+                                Active
+                              </Text>
+                            </View>
+                          )}
+                          {isOwner && (
+                            <View
+                              className="px-2 py-0.5 rounded-full"
+                              style={{ backgroundColor: 'rgba(91, 224, 176, 0.18)' }}>
+                              <Text className="font-jakarta-bold text-accent-mint text-[9px] uppercase tracking-widest">
+                                Owner
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text className="font-jakarta text-text-low text-[11px]">
+                          {g.members.length} {g.members.length === 1 ? 'member' : 'members'}
+                        </Text>
+                      </View>
+                      <AvatarStack members={g.members} size={28} maxVisible={4} />
+                    </View>
+
+                    <View className="flex-row gap-2">
+                      {!isActive && (
+                        <Pressable
+                          onPress={() => setActiveGroup(g.id)}
+                          className="flex-1 bg-surface-3 py-3 rounded-xl border border-hairline">
+                          <Text className="font-jakarta-bold text-text-high text-center text-xs uppercase tracking-widest">
+                            Set active
+                          </Text>
+                        </Pressable>
+                      )}
+                      <Pressable
+                        onPress={() => handleInvite(g.id)}
+                        disabled={busyGroupId === g.id}
+                        className="flex-1 bg-accent-coral py-3 rounded-xl"
+                        style={{ opacity: busyGroupId === g.id ? 0.5 : 1 }}>
+                        <Text className="font-jakarta-bold text-white text-center text-xs uppercase tracking-widest">
+                          {busyGroupId === g.id ? 'Generating…' : 'Invite'}
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => confirmLeave(g.id, g.name, isOwner)}
+                        className="px-4 py-3 rounded-xl bg-surface-3 border border-hairline">
+                        <Ionicons name="exit-outline" size={16} color={themeColors.textMid} />
+                      </Pressable>
+                    </View>
+                  </GradientCard>
+                </View>
+              );
+            })
+          )}
+
+          {/* ── Create new group ────────────────────────────────────── */}
+          <Text className="font-jakarta-bold text-text-high text-xl mb-1 mt-6">
+            Create a new group
+          </Text>
+          <Text className="font-jakarta text-text-low text-xs mb-4 leading-relaxed">
+            Useful for keeping a couple's shared spending separate from your parents-and-kids view.
+          </Text>
+          <GradientCard padding="lg" className="mb-12">
+            <TextInput
+              value={newName}
+              onChangeText={setNewName}
+              placeholder="e.g. Roommates, Family, Bali Trip"
+              placeholderTextColor={themeColors.textDim}
+              className="bg-surface-3 px-4 py-4 rounded-2xl text-text-high font-jakarta text-base border border-hairline mb-4"
+            />
+            <NeonButton size="md" block loading={creating} onPress={handleCreate}>
+              Create group
+            </NeonButton>
+          </GradientCard>
+        </ScrollView>
+      </SafeAreaView>
+    </Surface>
+  );
+}

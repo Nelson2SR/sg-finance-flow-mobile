@@ -313,3 +313,60 @@ export const labelsApi = {
   setForTransaction: (transactionId: number, labels: string[]) =>
     apiClient.put<string[]>(`/transactions/${transactionId}/labels`, { labels }),
 };
+
+// ── Vault Groups (PR-5b) ─────────────────────────────────────────────────
+
+export interface ApiVaultGroupMember {
+  user_id: number;
+  display_name: string | null;
+  avatar_url: string | null;
+  role: 'OWNER' | 'MEMBER';
+  joined_at: string;
+}
+
+export interface ApiVaultGroup {
+  id: number;
+  name: string;
+  emoji: string | null;
+  created_at: string;
+  role: 'OWNER' | 'MEMBER';
+  members: ApiVaultGroupMember[];
+}
+
+export interface ApiGroupInvite {
+  invite_code: string;
+  expires_at: string;
+  share_url: string | null;
+}
+
+export interface ApiInvitePreview {
+  group: ApiVaultGroup;
+  inviter_display_name: string | null;
+  expires_at: string;
+}
+
+export const groupsApi = {
+  list: () => apiClient.get<ApiVaultGroup[]>('/groups'),
+  create: (body: { name: string; emoji?: string }) =>
+    apiClient.post<ApiVaultGroup>('/groups', body),
+  get: (id: number) => apiClient.get<ApiVaultGroup>(`/groups/${id}`),
+  update: (id: number, body: { name?: string; emoji?: string }) =>
+    apiClient.patch<ApiVaultGroup>(`/groups/${id}`, body),
+  remove: (id: number) => apiClient.delete<void>(`/groups/${id}`),
+
+  createInvite: (groupId: number, body: { email?: string } = {}) =>
+    apiClient.post<ApiGroupInvite>(`/groups/${groupId}/invite`, body),
+  previewInvite: (code: string) =>
+    apiClient.get<ApiInvitePreview>(`/groups/invitations/${code}`),
+  join: (code: string) =>
+    apiClient.post<ApiVaultGroup>('/groups/join', { invite_code: code }),
+
+  leave: (groupId: number) =>
+    apiClient.post<void>(`/groups/${groupId}/leave`),
+  removeMember: (groupId: number, userId: number) =>
+    apiClient.delete<void>(`/groups/${groupId}/members/${userId}`),
+  transferOwnership: (groupId: number, newOwnerUserId: number) =>
+    apiClient.post<void>(`/groups/${groupId}/transfer-ownership`, {
+      new_owner_user_id: newOwnerUserId,
+    }),
+};
