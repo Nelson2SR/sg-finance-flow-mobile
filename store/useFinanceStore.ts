@@ -50,6 +50,14 @@ interface FinanceState {
   wallets: Wallet[];
   budgets: Budget[];
   transactions: Transaction[];
+  /** True while syncData is in flight. The screens use this together
+   * with `hasSynced` to decide between "show skeletons" (first sync,
+   * no data yet) and "show empty state" (sync finished, still empty). */
+  isSyncing: boolean;
+  /** Flips to true after the first syncData call resolves, regardless
+   * of success. Stays true across subsequent syncs so we don't
+   * re-show the cold-start skeleton on every pull-to-refresh. */
+  hasSynced: boolean;
   
   // Actions
   setActiveWallet: (id: string) => void;
@@ -99,6 +107,9 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   budgets: [],
 
   transactions: [],
+
+  isSyncing: false,
+  hasSynced: false,
 
   setActiveWallet: (id) => set({ activeWalletId: id }),
 
@@ -163,6 +174,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   },
 
   syncData: async () => {
+    set({ isSyncing: true });
     try {
       const [accountsRes, txsRes] = await Promise.all([
         financeApi.getAccounts(),
@@ -214,6 +226,12 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       // and commonly expected in dev when the backend is offline or the
       // current token isn't valid against it.
       console.warn('Sync failed', error);
+    } finally {
+      // Flip both flags together: isSyncing → false, hasSynced → true.
+      // Screens use hasSynced=false as the "show skeleton" condition so
+      // a brand-new launch never blinks the empty state in for the
+      // 200ms before data lands.
+      set({ isSyncing: false, hasSynced: true });
     }
   },
 

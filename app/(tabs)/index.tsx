@@ -9,6 +9,7 @@ import {
   NativeSyntheticEvent,
   NativeScrollEvent,
   Platform,
+  RefreshControl,
   ScrollView,
   Alert,
 } from 'react-native';
@@ -27,7 +28,7 @@ import { MagicScanReviewModal } from '../../components/features/MagicScanModal';
 import { financeApi } from '../../services/apiClient';
 import { useAuth } from '../../context/AuthContext';
 import { DEV_DISABLE_AUTH } from '../../constants/Config';
-import { Surface, SurfaceHeaderArea, GradientCard, NeonButton } from '../../components/ui';
+import { GradientCard, NeonButton, Skeleton, SkeletonRow, Surface, SurfaceHeaderArea } from '../../components/ui';
 import { useThemeColors } from '../../hooks/use-theme-colors';
 import { resolveCategoryStyle, tintWithAlpha } from '../../lib/categoryStyle';
 import { AvatarStack } from '../../components/features/AvatarStack';
@@ -98,6 +99,8 @@ export default function HomeScreen() {
   const setActiveWallet = useFinanceStore(s => s.setActiveWallet);
   const addTransactionsBatch = useFinanceStore(s => s.addTransactionsBatch);
   const syncData = useFinanceStore(s => s.syncData);
+  const isSyncing = useFinanceStore(s => s.isSyncing);
+  const hasSynced = useFinanceStore(s => s.hasSynced);
   const { isAuthenticated, user } = useAuth();
   // Vault Group context: drives the avatar stack on the active vault
   // card (replacing the legacy P1/P2 placeholder dots) and is the
@@ -369,12 +372,42 @@ export default function HomeScreen() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 120 : 100 }}>
-        {/* First-launch path: brand-new account, no wallets yet. Show a
-            two-step onboarding checklist instead of the wallet carousel
-            so users have an obvious next action. Once one wallet is
-            created the standard carousel + action buttons take over. */}
-        {wallets.length === 0 ? (
+        contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 120 : 100 }}
+        refreshControl={
+          // Pull-to-refresh re-fetches everything group-scoped:
+          // wallets, transactions, categories, labels. Using
+          // `isSyncing` directly means the spinner stays up as long as
+          // the actual fetch is in flight (no fake fixed-duration UX).
+          <RefreshControl
+            refreshing={isSyncing}
+            onRefresh={() => {
+              if (isAuthenticated && !DEV_DISABLE_AUTH) {
+                void syncData();
+                void syncCategoriesFromBackend();
+              }
+            }}
+            tintColor="#FF6B4A"
+          />
+        }>
+        {/* Three states for the carousel area:
+              1. First sync still in flight → skeleton card so the user
+                 sees motion instead of a blank or a misleading empty
+                 state during the 200–600ms initial fetch.
+              2. Sync done, still no wallets → first-launch checklist
+                 (brand-new account that hasn't created any wallets).
+              3. Wallets exist → real carousel. */}
+        {isSyncing && !hasSynced ? (
+          <View className="px-6 mb-8">
+            <View style={{ height: 200, marginBottom: 12 }}>
+              <Skeleton width="100%" height={200} radius={24} />
+            </View>
+            <View className="flex-row justify-center gap-2">
+              <Skeleton width={24} height={6} radius={3} />
+              <Skeleton width={6} height={6} radius={3} />
+              <Skeleton width={6} height={6} radius={3} />
+            </View>
+          </View>
+        ) : wallets.length === 0 ? (
           <View className="px-6 mb-2">
             <View className="mb-6 mt-2">
               <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-2">
@@ -529,7 +562,21 @@ export default function HomeScreen() {
             </Pressable>
           </View>
 
-          {localTransactions.length === 0 ? (
+          {isSyncing && !hasSynced ? (
+            <View className="gap-3">
+              {[0, 1, 2].map(i => (
+                <GradientCard key={i} padding="md" radius="row">
+                  <View className="flex-row items-center gap-4">
+                    <Skeleton width={44} height={44} radius={14} />
+                    <View style={{ flex: 1 }}>
+                      <SkeletonRow lines={2} />
+                    </View>
+                    <Skeleton width={60} height={18} />
+                  </View>
+                </GradientCard>
+              ))}
+            </View>
+          ) : localTransactions.length === 0 ? (
             <GradientCard padding="lg" radius="row">
               <View className="items-center justify-center py-6">
                 <Ionicons name="leaf-outline" size={28} color={themeColors.textLow} />

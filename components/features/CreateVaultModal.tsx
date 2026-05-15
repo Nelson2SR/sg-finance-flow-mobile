@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, View, Text, Pressable, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import { ActivityIndicator, Alert, View, Text, Pressable, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 
@@ -122,11 +122,18 @@ export const CreateVaultModal = ({ visible, onClose }: Props) => {
             onPress={handleSave}
             disabled={!isValid}
             style={isValid ? { boxShadow: '0 0 24px rgba(255, 107, 74, 0.45)' } : null}
-            className={`py-4 rounded-full items-center active:scale-95 ${isValid ? 'bg-accent-coral' : 'bg-surface-3'}`}>
-            <Text
-              className={`font-jakarta-bold text-base ${isValid ? 'text-white' : 'text-text-low'}`}>
-              {isSaving ? 'Adding…' : 'Add Wallet'}
-            </Text>
+            className={`py-4 rounded-full items-center justify-center active:scale-95 ${isValid ? 'bg-accent-coral' : 'bg-surface-3'}`}>
+            {isSaving ? (
+              <View className="flex-row items-center gap-2">
+                <ActivityIndicator size="small" color="#fff" />
+                <Text className="font-jakarta-bold text-white text-base">Adding…</Text>
+              </View>
+            ) : (
+              <Text
+                className={`font-jakarta-bold text-base ${isValid ? 'text-white' : 'text-text-low'}`}>
+                Add Wallet
+              </Text>
+            )}
           </Pressable>
         </View>
       </KeyboardAvoidingView>

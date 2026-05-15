@@ -1,11 +1,21 @@
 import React, { useState } from 'react';
-import { View, Text, SectionList, TouchableOpacity, ScrollView, TextInput, Platform, Pressable } from 'react-native';
+import {
+  View,
+  Text,
+  SectionList,
+  TouchableOpacity,
+  ScrollView,
+  TextInput,
+  Platform,
+  Pressable,
+  RefreshControl,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { format, isToday, isYesterday, startOfWeek, startOfMonth, startOfYear, isAfter } from 'date-fns';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { useCategoriesStore } from '../../store/useCategoriesStore';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
-import { Surface, SurfaceHeaderArea, GradientCard, ScreenHeader, NeonButton } from '../../components/ui';
+import { GradientCard, NeonButton, ScreenHeader, Skeleton, SkeletonRow, Surface, SurfaceHeaderArea } from '../../components/ui';
 import { useThemeColors } from '../../hooks/use-theme-colors';
 import { resolveCategoryStyle, resolveLabelColor, tintWithAlpha } from '../../lib/categoryStyle';
 
@@ -19,6 +29,9 @@ export default function TransactionsScreen() {
   const activeWalletId = useFinanceStore(s => s.activeWalletId);
   const setActiveWallet = useFinanceStore(s => s.setActiveWallet);
   const deleteTransaction = useFinanceStore(s => s.deleteTransaction);
+  const isSyncing = useFinanceStore(s => s.isSyncing);
+  const hasSynced = useFinanceStore(s => s.hasSynced);
+  const syncData = useFinanceStore(s => s.syncData);
 
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('ALL');
   const [showSearch, setShowSearch] = useState(false);
@@ -248,6 +261,13 @@ export default function TransactionsScreen() {
           paddingTop: 24,
         }}
         stickySectionHeadersEnabled={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isSyncing}
+            onRefresh={() => void syncData()}
+            tintColor="#FF6B4A"
+          />
+        }
         renderSectionHeader={({ section: { title } }) => (
           <Text className="font-jakarta-bold text-text-low uppercase tracking-widest text-[10px] mt-6 mb-3">
             {title}
@@ -332,16 +352,34 @@ export default function TransactionsScreen() {
             </View>
           );
         }}
-        ListEmptyComponent={() => (
-          <View className="items-center justify-center mt-24">
-            <View className="w-20 h-20 bg-surface-2 border border-hairline rounded-full justify-center items-center mb-4">
-              <Ionicons name="search-outline" size={28} color="#FF6B4A" />
+        ListEmptyComponent={() =>
+          isSyncing && !hasSynced ? (
+            // Cold-start: show four skeleton rows so the surface doesn't
+            // flash an empty message during the initial sync.
+            <View className="gap-3 mt-4">
+              {[0, 1, 2, 3].map(i => (
+                <GradientCard key={i} padding="md" radius="row">
+                  <View className="flex-row items-center gap-4">
+                    <Skeleton width={44} height={44} radius={14} />
+                    <View style={{ flex: 1 }}>
+                      <SkeletonRow lines={2} />
+                    </View>
+                    <Skeleton width={70} height={18} />
+                  </View>
+                </GradientCard>
+              ))}
             </View>
-            <Text className="font-jakarta-bold text-text-mid text-center">
-              No transactions match your filters.
-            </Text>
-          </View>
-        )}
+          ) : (
+            <View className="items-center justify-center mt-24">
+              <View className="w-20 h-20 bg-surface-2 border border-hairline rounded-full justify-center items-center mb-4">
+                <Ionicons name="search-outline" size={28} color="#FF6B4A" />
+              </View>
+              <Text className="font-jakarta-bold text-text-mid text-center">
+                No transactions match your filters.
+              </Text>
+            </View>
+          )
+        }
       />
     </Surface>
   );

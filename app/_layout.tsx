@@ -18,6 +18,7 @@ import '../global.css';
 import { AuthProvider } from '../context/AuthContext';
 import { AuthGuard } from '../components/AuthGuard';
 import { BiometricGate } from '../components/BiometricGate';
+import { RootErrorBoundary } from '../components/RootErrorBoundary';
 import * as Linking from 'expo-linking';
 import { useVaultGroupsStore } from '../store/useVaultGroupsStore';
 import { useBiometricStore } from '../lib/biometricLock';
@@ -95,12 +96,13 @@ export default function RootLayout() {
   }, []);
 
   return (
-
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <AuthProvider>
-        <RootLayoutNav />
-      </AuthProvider>
-    </GestureHandlerRootView>
+    <RootErrorBoundary>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <AuthProvider>
+          <RootLayoutNav />
+        </AuthProvider>
+      </GestureHandlerRootView>
+    </RootErrorBoundary>
   );
 }
 

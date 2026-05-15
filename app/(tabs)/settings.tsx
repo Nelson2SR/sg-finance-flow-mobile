@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, View, Text, Switch, ScrollView, TextInput, Platform, Pressable } from 'react-native';
+import { ActivityIndicator, Alert, View, Text, Switch, ScrollView, TextInput, Platform, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
 import { useRouter } from 'expo-router';
@@ -162,18 +162,23 @@ export default function SettingsScreen() {
           <Row
             label="Display Name"
             right={
-              <TextInput
-                className="text-text-high font-jakarta-bold text-sm text-right min-w-[120px]"
-                value={nameDraft}
-                onChangeText={setNameDraft}
-                onBlur={commitName}
-                onSubmitEditing={commitName}
-                maxLength={64}
-                returnKeyType="done"
-                editable={!savingName}
-                placeholder="Add a name"
-                placeholderTextColor={themeColors.textDim}
-              />
+              <View className="flex-row items-center gap-2">
+                {savingName && (
+                  <ActivityIndicator size="small" color="#FF6B4A" />
+                )}
+                <TextInput
+                  className="text-text-high font-jakarta-bold text-sm text-right min-w-[120px]"
+                  value={nameDraft}
+                  onChangeText={setNameDraft}
+                  onBlur={commitName}
+                  onSubmitEditing={commitName}
+                  maxLength={64}
+                  returnKeyType="done"
+                  editable={!savingName}
+                  placeholder="Add a name"
+                  placeholderTextColor={themeColors.textDim}
+                />
+              </View>
             }
             last
           />
