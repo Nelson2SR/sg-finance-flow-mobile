@@ -320,7 +320,9 @@ export default function GroupsScreen() {
             Create a new group
           </Text>
           <Text className="font-jakarta text-text-low text-xs mb-4 leading-relaxed">
-            Useful for keeping a couple's shared spending separate from your parents-and-kids view.
+            Spin up a fresh group for any shared-spending context — a household,
+            a trip, roommates, a project team. Each group has its own activity
+            view and member roster.
           </Text>
           <GradientCard padding="lg" className="mb-12">
             <TextInput
