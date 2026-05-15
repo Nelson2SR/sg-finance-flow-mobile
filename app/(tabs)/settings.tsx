@@ -3,7 +3,7 @@ import { Alert, View, Text, Switch, ScrollView, TextInput, Platform, Pressable }
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
 import { useRouter } from 'expo-router';
-import { Surface, SurfaceHeaderArea, GradientCard, ScreenHeader, NeonButton } from '../../components/ui';
+import { Surface, SurfaceHeaderArea, GradientCard, ScreenHeader } from '../../components/ui';
 import { useThemeColors } from '../../hooks/use-theme-colors';
 import { useCopilotStore, CopilotPersona } from '../../store/useCopilotStore';
 import { useCategoriesStore } from '../../store/useCategoriesStore';
@@ -81,15 +81,7 @@ export default function SettingsScreen() {
   return (
     <Surface>
       <SurfaceHeaderArea>
-        <ScreenHeader
-          eyebrow="Profile & Identity"
-          title="Settings"
-          action={
-            <NeonButton variant="secondary" size="sm" icon="log-out-outline">
-              Sign out
-            </NeonButton>
-          }
-        />
+        <ScreenHeader eyebrow="Profile & Identity" title="Settings" />
       </SurfaceHeaderArea>
 
       <ScrollView
