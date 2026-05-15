@@ -41,6 +41,32 @@ import { useVaultGroupsStore } from '../store/useVaultGroupsStore';
 
 const INVITE_BASE_URL = 'https://sgff.app/invite/';
 
+/**
+ * Curated emoji set for the "Create a new group" picker. Hand-picked
+ * to cover the shared-spending contexts called out in the body copy —
+ * households, trips, roommates, project teams, plus a few generic
+ * options. The first entry is the default so the form is never
+ * submitted with a null emoji.
+ *
+ * Order is intentional: most-common cases first. Keep this list
+ * short (≤ 12) so the horizontal picker scrolls minimally on a
+ * 375pt-wide phone.
+ */
+const GROUP_EMOJI_OPTIONS = [
+  '🏡', // household / home
+  '👫', // couple
+  '👨‍👩‍👧', // family
+  '🛋', // roommates
+  '✈️', // trip
+  '🍽', // dining / meals
+  '💼', // business / team
+  '🎉', // event
+  '🚗', // car / road trip
+  '🐾', // pet
+  '⛺', // camp / outdoors
+  '💰', // generic
+] as const;
+
 export default function GroupsScreen() {
   const router = useRouter();
   const themeColors = useThemeColors();
@@ -55,6 +81,7 @@ export default function GroupsScreen() {
 
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
+  const [newEmoji, setNewEmoji] = useState<string>(GROUP_EMOJI_OPTIONS[0]);
   const [busyGroupId, setBusyGroupId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -148,8 +175,10 @@ export default function GroupsScreen() {
     }
     setCreating(true);
     try {
-      await createGroup(name);
+      await createGroup(name, newEmoji);
       setNewName('');
+      // Reset picker to the default for the next create.
+      setNewEmoji(GROUP_EMOJI_OPTIONS[0]);
     } catch (err: any) {
       Alert.alert(
         'Could not create group',
@@ -325,6 +354,42 @@ export default function GroupsScreen() {
             view and member roster.
           </Text>
           <GradientCard padding="lg" className="mb-12">
+            <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-2 px-1">
+              Pick an icon
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 8, paddingVertical: 2 }}
+              className="mb-4">
+              {GROUP_EMOJI_OPTIONS.map((emoji) => {
+                const isSelected = emoji === newEmoji;
+                return (
+                  <Pressable
+                    key={emoji}
+                    onPress={() => setNewEmoji(emoji)}
+                    className="justify-center items-center"
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 22,
+                      backgroundColor: isSelected
+                        ? 'rgba(255, 107, 74, 0.18)'
+                        : 'rgba(255, 255, 255, 0.04)',
+                      borderWidth: 1.5,
+                      borderColor: isSelected
+                        ? '#FF6B4A'
+                        : themeColors.hairline,
+                    }}>
+                    <Text style={{ fontSize: 22 }}>{emoji}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-2 px-1">
+              Group name
+            </Text>
             <TextInput
               value={newName}
               onChangeText={setNewName}
