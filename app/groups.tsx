@@ -236,7 +236,10 @@ export default function GroupsScreen() {
           <View className="w-10" />
         </View>
 
-        <ScrollView className="flex-1 px-6" showsVerticalScrollIndicator={false}>
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 120 }}
+          showsVerticalScrollIndicator={false}>
           <Text className="font-jakarta text-text-low text-xs mb-5 leading-relaxed">
             A Vault Group lets you share your transaction view with other people.
             All members see every member's activity, each row stamped with the
@@ -353,7 +356,7 @@ export default function GroupsScreen() {
             a trip, roommates, a project team. Each group has its own activity
             view and member roster.
           </Text>
-          <GradientCard padding="lg" className="mb-12">
+          <GradientCard padding="lg">
             <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-2 px-1">
               Pick an icon
             </Text>
