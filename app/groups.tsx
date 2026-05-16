@@ -109,7 +109,7 @@ export default function GroupsScreen() {
             text: 'Share',
             onPress: () =>
               Share.share({
-                message: `Join "${groupName}" on SG Finance Flow: ${url}`,
+                message: `Join "${groupName}" on VaultWise: ${url}`,
                 url,
               }),
           },

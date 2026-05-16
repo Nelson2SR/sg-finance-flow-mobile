@@ -1,4 +1,4 @@
-# App Review Notes — SG Finance Flow
+# App Review Notes — VaultWise
 
 > Copy-paste these into App Store Connect when submitting. **Read once
 > first**: the demo-account values and version-specific paragraphs need
@@ -9,7 +9,7 @@
 ## Review Notes (paste into App Store Connect → App Information → App Review Information → Notes)
 
 ```
-SG Finance Flow is a personal budgeting and expense tracking app for
+VaultWise is a personal budgeting and expense tracking app for
 Singapore residents. It does NOT connect to bank APIs, does NOT
 facilitate money movement, and does NOT provide financial advice. It
 is comparable in scope to Mint, YNAB, or Monarch.
@@ -64,7 +64,7 @@ PRIVACY / DATA HANDLING
 
 GUIDELINE 5.2.5 — Why we're a tracker, not a finance app
 
-  SG Finance Flow does not:
+  VaultWise does not:
   - Initiate money transfers
   - Connect to bank APIs (no Plaid / Yodlee / Open Banking)
   - Hold user funds

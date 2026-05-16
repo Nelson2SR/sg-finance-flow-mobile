@@ -44,7 +44,7 @@ export function BiometricGate() {
       return;
     }
     const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: 'Unlock SG Finance Flow',
+      promptMessage: 'Unlock VaultWise',
       // Letting the OS pick the type — iOS uses Face ID where available,
       // Touch ID otherwise. We don't disable device passcode fallback
       // (Apple's HIG strongly recommends keeping it).
@@ -105,7 +105,7 @@ export function BiometricGate() {
         <Ionicons name="lock-closed" size={40} color="white" />
       </View>
       <Text className="font-jakarta-bold text-white text-2xl tracking-tighter mb-2">
-        SG Finance Flow
+        VaultWise
       </Text>
       <Text className="font-jakarta text-text-mid text-sm mb-10 text-center px-8">
         Unlock with Face ID or Touch ID to continue.

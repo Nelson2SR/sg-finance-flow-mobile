@@ -1,4 +1,4 @@
-# App Store Action Items — SG Finance Flow
+# App Store Action Items — VaultWise
 
 > Status of every item from the [Deployment Guide](./APP_STORE_DEPLOYMENT_GUIDE.md). Updated 2026-05-16.
 >
@@ -10,7 +10,7 @@
 
 ### Code & build configuration
 
-- ✅ `app.json` — display name set to "SG Finance Flow", `ios.bundleIdentifier=com.sgfinanceflow.mobile`, `buildNumber=1`, Info.plist usage descriptions (Camera / Photos / FaceID), `ITSAppUsesNonExemptEncryption=false`, `expo-secure-store` plugin declared, Android `package` mirrored.
+- ✅ `app.json` — display name set to "VaultWise", `ios.bundleIdentifier=com.sgfinanceflow.mobile`, `buildNumber=1`, Info.plist usage descriptions (Camera / Photos / FaceID), `ITSAppUsesNonExemptEncryption=false`, `expo-secure-store` plugin declared, Android `package` mirrored.
 - ✅ `eas.json` — development / preview / production profiles with `EXPO_PUBLIC_API_URL` baked per environment; `autoIncrement: true` on production; submit profile with `ascAppId` + `appleTeamId` placeholders to fill once App Store Connect record exists.
 - ✅ `constants/Config.ts` — API URL reads `EXPO_PUBLIC_API_URL` first, falls back to LAN IP in dev only. Throws at module load in release builds if unset — guaranteeing no build can ship pointed at a private IP.
 
@@ -42,7 +42,7 @@
 ### Step 2 — Register bundle ID
 
 - [ ] [developer.apple.com/account/resources/identifiers](https://developer.apple.com/account/resources/identifiers/list) → "+" → App IDs → App
-- [ ] Description: `SG Finance Flow Mobile`
+- [ ] Description: `VaultWise Mobile`
 - [ ] Bundle ID: Explicit → `com.sgfinanceflow.mobile` *(must match `app.json`)*
 - [ ] Capabilities to enable now (free for v1.0): Associated Domains (for future invite links), Push Notifications (future)
 
@@ -77,7 +77,7 @@
 ### Step 6 — App Store Connect record
 
 - [ ] [appstoreconnect.apple.com](https://appstoreconnect.apple.com) → Apps → "+" → New App
-- [ ] Platform: iOS · Name: `SG Finance Flow` · Primary Language: English (U.S.) · Bundle ID: `com.sgfinanceflow.mobile` · SKU: `SGFINFLOW001`
+- [ ] Platform: iOS · Name: `VaultWise` · Primary Language: English (U.S.) · Bundle ID: `com.sgfinanceflow.mobile` · SKU: `SGFINFLOW001`
 - [ ] Capture the **ASC App ID** and your **Apple Team ID** → paste both into `eas.json`'s `submit.production.ios` block, replacing the `REPLACE_WITH_*` placeholders
 
 ### Step 7 — Assets
@@ -149,7 +149,7 @@ In App Store Connect → your app → 1.0 Prepare for Submission:
 - [ ] **Support URL**: `https://sgfinanceflow.com/support`
 - [ ] **Marketing URL**: optional
 - [ ] **Privacy Policy URL**: `https://sgfinanceflow.com/privacy`
-- [ ] **Copyright**: `© 2026 SG Finance Flow`
+- [ ] **Copyright**: `© 2026 VaultWise`
 - [ ] **App Review Information** — Demo Account section: paste from `docs/APP_REVIEW_NOTES.md` § "Review Notes"
 - [ ] **Build**: select your TestFlight build
 - [ ] **Encryption Export Compliance**: questionnaire — answers in `APP_REVIEW_NOTES.md`

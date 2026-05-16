@@ -1,4 +1,4 @@
-# Support — SG Finance Flow
+# Support — VaultWise
 
 > Quick answers below. If yours isn't here, email us and we'll get back within 1–2 business days.
 
@@ -55,7 +55,7 @@ Sign in with your phone number on the new device. Your vault groups, transaction
 
 ### My Face ID isn't working
 
-Settings → Face ID & Passcode → ensure SG Finance Flow is enabled in the app list. If it still doesn't work, restart your phone — iOS occasionally drops the entitlement after an OS upgrade.
+Settings → Face ID & Passcode → ensure VaultWise is enabled in the app list. If it still doesn't work, restart your phone — iOS occasionally drops the entitlement after an OS upgrade.
 
 ---
 

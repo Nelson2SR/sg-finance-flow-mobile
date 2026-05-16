@@ -1,10 +1,10 @@
-# Terms of Service — SG Finance Flow
+# Terms of Service — VaultWise
 
 **Effective date:** 2026-05-16
-**App:** SG Finance Flow (iOS · App Store)
+**App:** VaultWise (iOS · App Store)
 **Operator:** [Your legal entity — fill in before launch]
 
-> These are the rules for using SG Finance Flow. We've kept them short. Read them.
+> These are the rules for using VaultWise. We've kept them short. Read them.
 
 ## 1. What you're agreeing to
 
@@ -12,7 +12,7 @@ By downloading or using the app, you agree to these Terms and to the [Privacy Po
 
 ## 2. What the app does — and what it doesn't
 
-SG Finance Flow is a tool for tracking your own finances. It is **not**:
+VaultWise is a tool for tracking your own finances. It is **not**:
 
 - A bank, broker, or financial advisor.
 - Connected to your bank — we do not access bank APIs. You import statements yourself.

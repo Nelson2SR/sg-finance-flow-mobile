@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 
 /**
- * SG Finance Flow Mobile Configuration
+ * VaultWise Mobile Configuration
  *
  * Backend URL resolution (in priority order):
  *

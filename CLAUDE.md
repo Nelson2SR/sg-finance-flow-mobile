@@ -1,8 +1,8 @@
-# SG Finance Flow Mobile - Universal App
+# VaultWise Mobile - Universal App
 
 ## Context
 
-This is the Universal frontend (iOS + Web) for the SG Finance Flow project, built with Expo (React Native) and Expo Router. The app connects to a Python backend (FastAPI) and a Neon Serverless Postgres database to offer privacy-focused finance tracking and "Family Sharing".
+This is the Universal frontend (iOS + Web) for the VaultWise project, built with Expo (React Native) and Expo Router. The app connects to a Python backend (FastAPI) and a Neon Serverless Postgres database to offer privacy-focused finance tracking and "Family Sharing".
 
 ## Tech Stack
 

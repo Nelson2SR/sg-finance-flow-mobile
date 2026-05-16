@@ -1,6 +1,6 @@
-# 🍎 App Store Deployment Guide — SG Finance Flow
+# 🍎 App Store Deployment Guide — VaultWise
 
-> **App**: SG Finance Flow · **Bundle ID**: `com.sgfinanceflow.mobile` (proposed)
+> **App**: VaultWise · **Bundle ID**: `com.sgfinanceflow.mobile` (proposed)
 > **Tech Stack**: Expo 54 (React Native 0.81) · FastAPI · Neon Postgres
 > **Target**: iOS 16+ (iPhone & iPad) · Free with future IAP potential
 > **Last Updated**: 2026-05-14
@@ -33,7 +33,7 @@
 | Paid Apps agreement signed in App Store Connect | `[ ]` | Required even for free apps if future IAP is planned |
 
 > [!IMPORTANT]
-> **Organization vs Individual**: If you plan to display a company name (e.g., "SG Finance Flow Pte Ltd") under the app on the App Store, you must enroll as an **Organization**. Individual accounts show your personal legal name.
+> **Organization vs Individual**: If you plan to display a company name (e.g., "VaultWise Pte Ltd") under the app on the App Store, you must enroll as an **Organization**. Individual accounts show your personal legal name.
 
 ### 0.2 Development Environment
 
@@ -70,7 +70,7 @@ Before submitting to App Review, ensure:
 | Field | Value | Notes |
 |---|---|---|
 | **Platforms** | ☑ iOS | iPad support via `supportsTablet: true` in app.json |
-| **Name** | `SG Finance Flow` | Max 30 characters. Must be unique on the App Store. |
+| **Name** | `VaultWise` | Max 30 characters. Must be unique on the App Store. |
 | **Primary Language** | `English (U.S.)` | Add Simplified Chinese localization later |
 | **Bundle ID** | `com.sgfinanceflow.mobile` | Must match `ios.bundleIdentifier` in app.json. Register first in Certificates portal. |
 | **SKU** | `SGFINFLOW001` | Internal reference. Cannot be changed after creation. |
@@ -86,7 +86,7 @@ Before creating the app record, register the Bundle ID:
 1. Go to [developer.apple.com/account/resources/identifiers](https://developer.apple.com/account/resources/identifiers/list)
 2. Click **"+"** → **App IDs** → **App**
 3. Enter:
-   - **Description**: `SG Finance Flow Mobile`
+   - **Description**: `VaultWise Mobile`
    - **Bundle ID**: Explicit → `com.sgfinanceflow.mobile`
 4. Enable capabilities:
    - ☑ Associated Domains (if using universal links)
@@ -102,8 +102,8 @@ Before creating the app record, register the Bundle ID:
 +  "bundleIdentifier": "com.sgfinanceflow.mobile",
 +  "buildNumber": "1",
 +  "infoPlist": {
-+    "NSCameraUsageDescription": "SG Finance Flow needs camera access to scan receipts and bank statements.",
-+    "NSPhotoLibraryUsageDescription": "SG Finance Flow needs photo library access to import receipt images.",
++    "NSCameraUsageDescription": "VaultWise needs camera access to scan receipts and bank statements.",
++    "NSPhotoLibraryUsageDescription": "VaultWise needs photo library access to import receipt images.",
 +    "NSFaceIDUsageDescription": "Use Face ID to securely unlock your financial data.",
 +    "ITSAppUsesNonExemptEncryption": false
 +  }
@@ -240,7 +240,7 @@ If you need manual control:
 ### 4.3 App Description (Draft)
 
 ```
-SG Finance Flow — Your private, AI-powered financial companion.
+VaultWise — Your private, AI-powered financial companion.
 
 🔒 PRIVACY FIRST
 Your bank statement passwords never leave your device. Stored in iOS 
@@ -327,7 +327,7 @@ Complete the App Privacy section in App Store Connect:
 
 ### 5.2 Guideline 5.2.5 — Finance Category Clarification
 
-SG Finance Flow is a **personal finance tracker**, NOT a financial institution:
+VaultWise is a **personal finance tracker**, NOT a financial institution:
 
 - ✅ Does NOT move money between accounts
 - ✅ Does NOT provide investment advice
@@ -338,7 +338,7 @@ SG Finance Flow is a **personal finance tracker**, NOT a financial institution:
 **Include in App Review Notes:**
 
 ```
-SG Finance Flow is a personal budgeting and expense tracking app. 
+VaultWise is a personal budgeting and expense tracking app. 
 It does NOT connect to bank APIs, does NOT facilitate financial 
 transactions, and does NOT provide financial advice.
 
@@ -497,7 +497,7 @@ npx eas-cli submit --platform ios
 - [ ] Keywords optimized (100 char max)
 - [ ] Screenshots for all required sizes
 - [ ] App icon 1024×1024, no transparency
-- [ ] Copyright: `© 2026 SG Finance Flow`
+- [ ] Copyright: `© 2026 VaultWise`
 - [ ] App Review notes with demo credentials
 - [ ] Privacy labels completed
 - [ ] Age rating questionnaire done

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "AI Finance Tracker",
+    "name": "VaultWise",
     "slug": "ai-finance-tracker",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -13,8 +13,8 @@
       "bundleIdentifier": "com.aifinancetracker.app",
       "buildNumber": "1",
       "infoPlist": {
-        "NSCameraUsageDescription": "AI Finance Tracker uses the camera so you can snap receipts and import statements with Magic Scan.",
-        "NSPhotoLibraryUsageDescription": "AI Finance Tracker needs photo library access to import receipt images you've already saved.",
+        "NSCameraUsageDescription": "VaultWise uses the camera so you can snap receipts and import statements with Magic Scan.",
+        "NSPhotoLibraryUsageDescription": "VaultWise needs photo library access to import receipt images you've already saved.",
         "NSFaceIDUsageDescription": "Face ID unlocks your private finance data on this device.",
         "ITSAppUsesNonExemptEncryption": false
       },

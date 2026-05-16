@@ -1,17 +1,17 @@
-# Privacy Policy — SG Finance Flow
+# Privacy Policy — VaultWise
 
 **Effective date:** 2026-05-16
-**App:** SG Finance Flow (iOS · App Store)
+**App:** VaultWise (iOS · App Store)
 **Operator:** [Your legal entity — fill in before launch]
 **Contact:** privacy@sgfinanceflow.com  *(replace with a working address)*
 
-> This document explains what data SG Finance Flow collects, how we use
+> This document explains what data VaultWise collects, how we use
 > it, who else sees it, and the choices you have. Plain language —
 > short, specific. If anything reads as fuzzy, email us; we'll fix it.
 
 ## 1. What we are
 
-SG Finance Flow is a personal finance tracker. You import bank statements
+VaultWise is a personal finance tracker. You import bank statements
 you already have, the app categorises them, and you see your spending
 trends. We are **not** a financial institution. We do not move money. We
 do not connect to bank APIs. We do not give investment advice.
@@ -78,7 +78,7 @@ We respect GDPR (if you're in the EU/EEA) and PDPA (Singapore). Singapore reside
 
 ## 6. Children
 
-SG Finance Flow is not directed at children under 13. We don't knowingly collect data from anyone under 13. If you believe a child has used the app, email us and we'll delete the account.
+VaultWise is not directed at children under 13. We don't knowingly collect data from anyone under 13. If you believe a child has used the app, email us and we'll delete the account.
 
 ## 7. Changes
 
