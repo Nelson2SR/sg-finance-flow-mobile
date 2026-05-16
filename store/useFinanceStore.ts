@@ -241,6 +241,25 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       // a brand-new launch never blinks the empty state in for the
       // 200ms before data lands.
       set({ isSyncing: false, hasSynced: true });
+
+      // Dev-only convenience: if the user has nothing in their account
+      // (empty backend, App Review demo, fresh signup) AND we're in a
+      // dev build, populate from devSeedData so every screen renders
+      // populated UI. Real data always wins — the moment a real wallet
+      // lands in the store, this branch is dead. Lazy-imported so the
+      // production bundle tree-shakes the seed strings out entirely.
+      if (__DEV__) {
+        const s = get();
+        if (s.wallets.length === 0 && s.transactions.length === 0) {
+          const { DEV_SEED } = await import('../lib/devSeedData');
+          set({
+            wallets: [...DEV_SEED.wallets],
+            transactions: [...DEV_SEED.transactions],
+            budgets: [...DEV_SEED.budgets],
+            activeWalletId: DEV_SEED.activeWalletId,
+          });
+        }
+      }
     }
   },
 

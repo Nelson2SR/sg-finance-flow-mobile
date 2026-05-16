@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
   SectionList,
-  TouchableOpacity,
   ScrollView,
   TextInput,
   Platform,
@@ -11,16 +10,16 @@ import {
   RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { format, isToday, isYesterday, startOfWeek, startOfMonth, startOfYear, isAfter } from 'date-fns';
+import { format, isToday, isYesterday } from 'date-fns';
+import Swipeable from 'react-native-gesture-handler/Swipeable';
+
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { useCategoriesStore } from '../../store/useCategoriesStore';
-import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { GradientCard, NeonButton, ScreenHeader, Skeleton, SkeletonRow, Surface, SurfaceHeaderArea } from '../../components/ui';
+import { FilterPill } from '../../components/features/FilterPill';
+import { MonthYearPicker, monthYearDisplay, monthYearToRange, type MonthYearValue } from '../../components/features/MonthYearPicker';
 import { useThemeColors } from '../../hooks/use-theme-colors';
 import { resolveCategoryStyle, resolveLabelColor, tintWithAlpha } from '../../lib/categoryStyle';
-
-type TimeFilter = 'WEEK' | 'MONTH' | 'YEAR' | 'ALL';
-const TIME_FILTERS: TimeFilter[] = ['ALL', 'WEEK', 'MONTH', 'YEAR'];
 
 export default function TransactionsScreen() {
   const themeColors = useThemeColors();
@@ -33,41 +32,54 @@ export default function TransactionsScreen() {
   const hasSynced = useFinanceStore(s => s.hasSynced);
   const syncData = useFinanceStore(s => s.syncData);
 
-  const [timeFilter, setTimeFilter] = useState<TimeFilter>('ALL');
+  const [monthFilter, setMonthFilter] = useState<MonthYearValue>('ALL');
+  const [walletFilter, setWalletFilter] = useState<string | null>(null); // null = All wallets
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null); // null = All categories
+  const [labelFilter, setLabelFilter] = useState<string | null>(null); // null = All labels
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  /**
-   * Active label filter. null = no filter (default). When set, the
-   * list shows only transactions whose `labels` array contains a
-   * case-insensitive match. Tapping a label chip on any row toggles
-   * this; tapping the dedicated chip row toggles too.
-   */
-  const [labelFilter, setLabelFilter] = useState<string | null>(null);
 
   const allLabels = useCategoriesStore(s => s.labels);
   const allCategoriesList = useCategoriesStore(s => s.categories);
 
-  const filteredTransactions = transactions.filter(t => {
-    if (activeWalletId !== 'ALL' && t.walletId !== activeWalletId) return false;
-
-    const now = new Date();
-    if (timeFilter === 'WEEK' && !isAfter(t.date, startOfWeek(now))) return false;
-    if (timeFilter === 'MONTH' && !isAfter(t.date, startOfMonth(now))) return false;
-    if (timeFilter === 'YEAR' && !isAfter(t.date, startOfYear(now))) return false;
-
-    if (searchQuery && !t.merchant.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-
-    if (labelFilter) {
-      const target = labelFilter.toLowerCase();
-      const has = (t.labels ?? []).some(l => l.toLowerCase() === target);
-      if (!has) return false;
+  // Default the Wallet filter to whichever wallet is currently active
+  // in the store — the user's expectation is "show my wallet first,
+  // not everyone's transactions in the active vault group."
+  useEffect(() => {
+    if (walletFilter === null && activeWalletId) {
+      setWalletFilter(activeWalletId);
     }
+  }, [activeWalletId, walletFilter]);
 
+  // Whenever any filter changes, kick off a fresh sync so the user
+  // sees a brief refresh spinner and the underlying data is current.
+  // The client-side filter below still does the actual filtering;
+  // syncing keeps the dataset honest with the backend.
+  useEffect(() => {
+    void syncData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monthFilter, walletFilter, categoryFilter, labelFilter]);
+
+  const { start: monthStart, end: monthEnd } = useMemo(
+    () => monthYearToRange(monthFilter),
+    [monthFilter],
+  );
+
+  const filteredTransactions = transactions.filter(t => {
+    if (t.date < monthStart || t.date > monthEnd) return false;
+    if (walletFilter !== null && t.walletId !== walletFilter) return false;
+    if (categoryFilter !== null && t.category !== categoryFilter) return false;
+    if (labelFilter !== null) {
+      const target = labelFilter.toLowerCase();
+      if (!(t.labels ?? []).some(l => l.toLowerCase() === target)) return false;
+    }
+    if (searchQuery && !t.merchant.toLowerCase().includes(searchQuery.toLowerCase())) {
+      return false;
+    }
     return true;
   });
 
-  // Toggle helper for label filter: tapping the active label clears it,
-  // tapping a different label switches to that one.
+  // Toggle helper kept for the per-row label chip → top filter shortcut.
   const toggleLabelFilter = (name: string) =>
     setLabelFilter(current => (current === name ? null : name));
 
@@ -99,34 +111,40 @@ export default function TransactionsScreen() {
     </Pressable>
   );
 
-  // Filter chip used twice (time filter + vault filter).
-  const Chip = ({
-    active,
-    onPress,
-    children,
-    icon,
-  }: {
-    active: boolean;
-    onPress: () => void;
-    children: React.ReactNode;
-    icon?: keyof typeof Ionicons.glyphMap;
-  }) => (
-    <Pressable
-      onPress={onPress}
-      className={`px-5 py-2.5 rounded-full flex-row items-center gap-2 border ${
-        active ? 'bg-accent-coral border-accent-coral' : 'bg-surface-2 border-hairline'
-      }`}
-      style={active ? { boxShadow: '0 0 18px rgba(255, 107, 74, 0.45)' } : null}>
-      {icon && (
-        <Ionicons name={icon} size={13} color={active ? '#fff' : themeColors.textMid} />
-      )}
-      <Text
-        className={`font-jakarta-bold text-[10px] tracking-widest uppercase ${
-          active ? 'text-white' : 'text-text-mid'
-        }`}>
-        {children}
-      </Text>
-    </Pressable>
+  // Build the option lists for each FilterPill. "All wallets" / "All
+  // categories" / "All labels" each show up as a top row with a
+  // sentinel `null` value so the user can clear the filter without
+  // hunting for a separate button.
+  const walletOptions = useMemo(
+    () => [
+      { value: null, label: 'All wallets' },
+      ...wallets.map((w) => ({
+        value: w.id,
+        label: w.name,
+        caption: `${w.type} · ${w.currency}`,
+      })),
+    ],
+    [wallets],
+  );
+  const categoryOptions = useMemo(
+    () => [
+      { value: null, label: 'All categories' },
+      ...allCategoriesList
+        .filter((c) => c.kind === 'expense' || c.kind === 'income')
+        .map((c) => ({
+          value: c.name,
+          label: c.name,
+          caption: c.kind === 'income' ? 'Income' : 'Expense',
+        })),
+    ],
+    [allCategoriesList],
+  );
+  const labelOptions = useMemo(
+    () => [
+      { value: null, label: 'All labels' },
+      ...allLabels.map((l) => ({ value: l.name, label: l.name })),
+    ],
+    [allLabels],
   );
 
   return (
@@ -164,92 +182,57 @@ export default function TransactionsScreen() {
           </View>
         )}
 
+        {/* Compact filter row — one row, four dropdowns. Replaces the
+            three full-width chip rows that used to push the activity
+            list halfway down the screen. Each dropdown opens a bottom
+            sheet from FilterPill; the Date dropdown's sheet contains
+            the year+month grid via MonthYearPicker. */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 8, paddingHorizontal: 24 }}>
-          {TIME_FILTERS.map(f => (
-            <Chip key={f} active={timeFilter === f} onPress={() => setTimeFilter(f)}>
-              {f === 'ALL' ? 'History' : `This ${f}`}
-            </Chip>
-          ))}
+          contentContainerStyle={{ gap: 10, paddingHorizontal: 24, paddingBottom: 8 }}>
+          <FilterPill
+            label="Date"
+            display={monthYearDisplay(monthFilter)}
+            active={monthFilter !== 'ALL'}
+            options={[{ value: 'ALL' as MonthYearValue, label: 'All time' }]}
+            value={monthFilter}
+            onChange={setMonthFilter}
+            extraContent={
+              <MonthYearPicker value={monthFilter} onChange={setMonthFilter} />
+            }
+          />
+          <FilterPill
+            label="Wallet"
+            display={
+              walletFilter === null
+                ? 'All wallets'
+                : wallets.find((w) => w.id === walletFilter)?.name ?? 'Wallet'
+            }
+            active={walletFilter !== null}
+            options={walletOptions}
+            value={walletFilter}
+            onChange={setWalletFilter}
+          />
+          <FilterPill
+            label="Category"
+            display={categoryFilter ?? 'All categories'}
+            active={categoryFilter !== null}
+            options={categoryOptions}
+            value={categoryFilter}
+            onChange={setCategoryFilter}
+          />
+          {allLabels.length > 0 && (
+            <FilterPill
+              label="Label"
+              display={labelFilter ?? 'All labels'}
+              active={labelFilter !== null}
+              options={labelOptions}
+              value={labelFilter}
+              onChange={setLabelFilter}
+            />
+          )}
         </ScrollView>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 8, paddingHorizontal: 24, paddingTop: 10 }}>
-          <Chip
-            active={activeWalletId === 'ALL'}
-            onPress={() => setActiveWallet('ALL')}
-            icon="apps-outline">
-            All Vaults
-          </Chip>
-          {wallets.map(w => (
-            <Chip key={w.id} active={activeWalletId === w.id} onPress={() => setActiveWallet(w.id)}>
-              {w.name}
-            </Chip>
-          ))}
-        </ScrollView>
-
-        {/* Label filter — only shown when the user has configured at
-            least one label. Tapping a chip filters the list to rows
-            tagged with that label; tapping the active chip clears the
-            filter. Mint accent matches the label chips elsewhere
-            (scan modal, activity rows). */}
-        {allLabels.length > 0 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 8, paddingHorizontal: 24, paddingTop: 10 }}>
-            <Pressable
-              onPress={() => setLabelFilter(null)}
-              className={`px-4 py-2 rounded-full flex-row items-center gap-1.5 border ${
-                labelFilter === null
-                  ? 'bg-accent-mint border-accent-mint'
-                  : 'bg-surface-2 border-hairline'
-              }`}>
-              <Ionicons
-                name="pricetags-outline"
-                size={12}
-                color={labelFilter === null ? '#fff' : themeColors.textMid}
-              />
-              <Text
-                className={`font-jakarta-bold text-[10px] tracking-widest uppercase ${
-                  labelFilter === null ? 'text-white' : 'text-text-mid'
-                }`}>
-                All Labels
-              </Text>
-            </Pressable>
-            {allLabels.map(lbl => {
-              const active = labelFilter === lbl.name;
-              const tint = resolveLabelColor(lbl.name);
-              return (
-                <Pressable
-                  key={lbl.id}
-                  onPress={() => toggleLabelFilter(lbl.name)}
-                  className="px-4 py-2 rounded-full flex-row items-center gap-1.5"
-                  style={{
-                    backgroundColor: active ? tint : tintWithAlpha(tint, 0.14),
-                    borderWidth: 1,
-                    borderColor: active ? tint : tintWithAlpha(tint, 0.32),
-                    boxShadow: active ? `0 0 14px ${tintWithAlpha(tint, 0.4)}` : undefined,
-                  }}>
-                  <Ionicons
-                    name={active ? 'checkmark' : 'pricetag-outline'}
-                    size={12}
-                    color={active ? '#fff' : tint}
-                  />
-                  <Text
-                    className="font-jakarta-bold text-[10px] tracking-widest uppercase"
-                    style={{ color: active ? '#ffffff' : tint }}>
-                    {lbl.name}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        )}
       </SurfaceHeaderArea>
 
       <SectionList
@@ -281,7 +264,11 @@ export default function TransactionsScreen() {
               <Swipeable renderRightActions={() => renderRightActions(item.id)}>
                 <GradientCard padding="md" radius="row">
                   <View className="flex-row justify-between items-center">
-                    <View className="flex-row items-center gap-4">
+                    {/* flex-1 + min-w-0 so the left side claims only the
+                        remaining width — without this, long category +
+                        label chips pushed the right-side amount column
+                        off-screen ("-$" with no number visible). */}
+                    <View className="flex-row items-center gap-4 flex-1" style={{ minWidth: 0 }}>
                       <View
                         className="w-11 h-11 rounded-2xl justify-center items-center"
                         style={{
@@ -335,11 +322,16 @@ export default function TransactionsScreen() {
                         </View>
                       </View>
                     </View>
-                    <View className="items-end">
+                    <View
+                      className="items-end ml-3"
+                      // flex-shrink-0 so the amount column never gets
+                      // squeezed even if the left side gets very long.
+                      style={{ flexShrink: 0 }}>
                       <Text
                         className={`font-jakarta-bold tracking-wide text-base ${
                           isIncome ? 'text-accent-mint' : 'text-text-high'
-                        }`}>
+                        }`}
+                        numberOfLines={1}>
                         {isIncome ? '+' : '-'}${item.amount.toFixed(2)}
                       </Text>
                       <Text className="font-jakarta text-text-low text-[10px] mt-1">
