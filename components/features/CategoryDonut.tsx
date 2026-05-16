@@ -33,8 +33,23 @@ const FALLBACK_PALETTE = ['#FF6B4A', '#5BE0B0', '#FFB547', '#FF5C7C', '#A78BFA',
 interface Props {
   transactions: Transaction[];
   categories: Category[];
-  /** Limit the chart to the last N days of activity. Defaults to 30. */
-  windowDays?: number;
+  /**
+   * Which side of the cashflow to slice. Defaults to `'EXPENSE'`
+   * so existing call-sites keep their old behaviour; pass
+   * `'INCOME'` for the income donut on Home.
+   */
+  txType?: 'EXPENSE' | 'INCOME';
+  /**
+   * Window mode:
+   *   • `'last-month'` — slice the previous calendar month
+   *     (e.g. April 1-30 when today is May 17). Title says
+   *     "Last month".
+   *   • `'last-30-days'` — rolling 30-day window from today.
+   *     Title says "Last 30 days". Legacy fallback so any
+   *     remaining call site keeps working.
+   * Defaults to `'last-month'` since that's the v1.0(4) Home design.
+   */
+  window?: 'last-month' | 'last-30-days';
 }
 
 interface Slice {
@@ -44,18 +59,35 @@ interface Slice {
   color: string;
 }
 
+/**
+ * Compute [start, end) date range for the requested window mode.
+ * `last-month` always returns the FULL previous calendar month so
+ * the Home Spend / Income pies stay symmetric and comparable.
+ */
+function windowRange(window: 'last-month' | 'last-30-days'): { start: Date; end: Date; label: string } {
+  if (window === 'last-30-days') {
+    const start = new Date();
+    start.setDate(start.getDate() - 30);
+    return { start, end: new Date(), label: 'Last 30 days' };
+  }
+  // last-month: first day of previous calendar month → first day of this month
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const end = new Date(now.getFullYear(), now.getMonth(), 1);
+  const label = start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  return { start, end, label };
+}
+
 function buildSlices(
   transactions: Transaction[],
   categories: Category[],
-  windowDays: number,
+  txType: 'EXPENSE' | 'INCOME',
+  range: { start: Date; end: Date },
 ): { slices: Slice[]; total: number } {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - windowDays);
-
   const totals = new Map<string, number>();
   for (const tx of transactions) {
-    if (tx.type !== 'EXPENSE') continue;
-    if (tx.date < cutoff) continue;
+    if (tx.type !== txType) continue;
+    if (tx.date < range.start || tx.date >= range.end) continue;
     totals.set(tx.category, (totals.get(tx.category) ?? 0) + tx.amount);
   }
 
@@ -79,27 +111,40 @@ function buildSlices(
   };
 }
 
-export function CategoryDonut({ transactions, categories, windowDays = 30 }: Props) {
+export function CategoryDonut({
+  transactions,
+  categories,
+  txType = 'EXPENSE',
+  window = 'last-month',
+}: Props) {
+  const range = useMemo(() => windowRange(window), [window]);
   const { slices, total } = useMemo(
-    () => buildSlices(transactions, categories, windowDays),
-    [transactions, categories, windowDays],
+    () => buildSlices(transactions, categories, txType, range),
+    [transactions, categories, txType, range],
   );
+  const title = txType === 'INCOME' ? 'Category income' : 'Category spend';
+  const totalLabel = txType === 'INCOME' ? 'total income' : 'total spend';
+  const emptyHeadline = txType === 'INCOME' ? 'No income yet' : 'No spend yet';
+  const emptyBody =
+    txType === 'INCOME'
+      ? `Categorised income in ${range.label} will appear here.`
+      : `Categorised expenses in ${range.label} will appear here.`;
 
   return (
     <GradientCard padding="lg" className="mb-8 overflow-hidden">
       <View className="flex-row justify-between items-center mb-6">
         <View>
           <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-1">
-            Last {windowDays} days
+            {range.label}
           </Text>
-          <Text className="font-jakarta-bold text-text-high text-lg">Category spend</Text>
+          <Text className="font-jakarta-bold text-text-high text-lg">{title}</Text>
         </View>
         {total > 0 && (
           <View className="items-end">
             <Text className="font-jakarta-bold text-text-high text-base">
               ${total.toFixed(0)}
             </Text>
-            <Text className="font-jakarta text-text-low text-[10px]">total spend</Text>
+            <Text className="font-jakarta text-text-low text-[10px]">{totalLabel}</Text>
           </View>
         )}
       </View>
@@ -107,10 +152,10 @@ export function CategoryDonut({ transactions, categories, windowDays = 30 }: Pro
       {slices.length === 0 ? (
         <View className="items-center justify-center py-10">
           <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-2">
-            No spend yet
+            {emptyHeadline}
           </Text>
           <Text className="font-jakarta text-text-mid text-sm text-center leading-relaxed px-4">
-            Categorised expenses in the last {windowDays} days will appear here.
+            {emptyBody}
           </Text>
         </View>
       ) : (

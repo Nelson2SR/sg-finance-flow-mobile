@@ -1,11 +1,31 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, ScrollView, Pressable, Platform } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
-import { useFinanceStore } from '../../store/useFinanceStore';
+import {
+  useFinanceStore,
+  getBudgetAmountForMonth,
+  currentMonthCode,
+  type Budget,
+} from '../../store/useFinanceStore';
 import { CreateBudgetModal } from '../../components/features/CreateBudgetModal';
+import { EditBudgetModal } from '../../components/features/EditBudgetModal';
+import { FilterPill } from '../../components/features/FilterPill';
+import { MonthYearPicker, monthYearDisplay } from '../../components/features/MonthYearPicker';
+import { TrendChart } from '../../components/features/TrendChart';
 import { Surface, SurfaceHeaderArea, GradientCard, ScreenHeader, NeonButton } from '../../components/ui';
 import { useThemeColors } from '../../hooks/use-theme-colors';
+
+/** First / last day of a `'YYYY-MM'` month code as a half-open
+ *  [start, end) range — matches the Activity tab's pattern so
+ *  inclusion semantics stay consistent across the app. */
+function monthCodeRange(monthCode: string): { start: Date; end: Date } {
+  const [y, m] = monthCode.split('-').map(Number);
+  return {
+    start: new Date(y, m - 1, 1),
+    end: new Date(y, m, 1),
+  };
+}
 
 const AURA_RADIUS = 100;
 const AURA_CIRCUMFERENCE = 2 * Math.PI * AURA_RADIUS;
@@ -60,6 +80,14 @@ export default function AnalyticsScreen() {
   const activeWalletId = useFinanceStore(s => s.activeWalletId);
   const budgets = useFinanceStore(s => s.budgets);
   const [budgetModalVisible, setBudgetModalVisible] = useState(false);
+  const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
+  // Month the whole tab is scoped to. Defaults to the current month.
+  // The picker writes a `'YYYY-MM'` code (no 'ALL' option — Insights
+  // is intentionally month-focused, unlike Activity which can show
+  // all-time).
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthCode());
+  const monthRange = useMemo(() => monthCodeRange(selectedMonth), [selectedMonth]);
+  const isCurrentMonth = selectedMonth === currentMonthCode();
 
   const activeBudgets = budgets.filter(
     b => b.wallets === 'ALL' || (activeWalletId !== null && b.wallets.includes(activeWalletId)),
@@ -67,14 +95,24 @@ export default function AnalyticsScreen() {
   // No magic fallback: when the user has no budgets, the aura collapses
   // to the empty track and we render a CTA instead of pretending there's
   // a 4k cap.
-  const globalBudgetCap = activeBudgets.reduce((a, b) => a + b.amount, 0);
+  const globalBudgetCap = activeBudgets.reduce(
+    (a, b) => a + getBudgetAmountForMonth(b, selectedMonth),
+    0,
+  );
 
-  const currentSpendRaw = transactions
+  // Spend / income scoped to the selected month. Previously these
+  // were all-time aggregates which made the cashflow card meaningless
+  // for anything but the very first day of use.
+  const monthTxs = useMemo(
+    () => transactions.filter((t) => t.date >= monthRange.start && t.date < monthRange.end),
+    [transactions, monthRange.start, monthRange.end],
+  );
+  const currentSpendRaw = monthTxs
     .filter(t => t.type === 'EXPENSE' && (activeBudgets.length > 0 ? true : t.walletId === activeWalletId))
     .reduce((acc, curr) => acc + curr.amount, 0);
 
-  const totalIncome = transactions.filter(t => t.type === 'INCOME').reduce((a, b) => a + b.amount, 0);
-  const totalSpend = transactions.filter(t => t.type === 'EXPENSE').reduce((a, b) => a + b.amount, 0);
+  const totalIncome = monthTxs.filter(t => t.type === 'INCOME').reduce((a, b) => a + b.amount, 0);
+  const totalSpend = monthTxs.filter(t => t.type === 'EXPENSE').reduce((a, b) => a + b.amount, 0);
   const cashflowMax = Math.max(totalIncome, totalSpend) || 1;
 
   // Fixed bar zone so bars never grow past the card and clip the title.
@@ -107,6 +145,32 @@ export default function AnalyticsScreen() {
           paddingTop: 12,
         }}
         showsVerticalScrollIndicator={false}>
+        {/* Month-year picker. Single FilterPill that opens a bottom
+            sheet with the same MonthYearPicker used on Activity.
+            Insights doesn't expose the 'ALL' option — every card is
+            inherently per-month, so all-time makes no sense here. */}
+        <View className="mb-6">
+          <FilterPill
+            label="Showing"
+            display={monthYearDisplay(selectedMonth)}
+            active={!isCurrentMonth}
+            options={[]}
+            value={selectedMonth}
+            onChange={(next) => setSelectedMonth(next as string)}
+            extraContent={
+              <MonthYearPicker
+                value={selectedMonth}
+                onChange={(next) => {
+                  if (next === 'ALL') return; // Insights is month-only.
+                  setSelectedMonth(next);
+                }}
+              />
+            }
+          />
+        </View>
+
+        <TrendChart anchorMonth={selectedMonth} />
+
         <GradientCard padding="lg" accent="coral" className="mb-8 items-center">
           {activeBudgets.length > 0 ? (
             <AmbientAura overallLimit={globalBudgetCap} currentSpend={currentSpendRaw} />
@@ -186,101 +250,91 @@ export default function AnalyticsScreen() {
             </Pressable>
           ) : (
             <View className="gap-3">
-              {activeBudgets.map(b => {
-                // Two new dimensions vs. the prior naive "sum every
-                // EXPENSE" calc:
-                //   1. Category scope — budget.categories[] (added
-                //      v1.0(3)). Empty list = legacy budget, falls
-                //      back to "all categories" so old rows don't go
-                //      silently zero.
-                //   2. Recurrence window — DAILY = today, MONTHLY =
-                //      this calendar month, ONCE = lifetime.
-                const now = new Date();
-                const periodStart =
-                  b.recurrence === 'DAILY'
-                    ? new Date(now.getFullYear(), now.getMonth(), now.getDate())
-                    : b.recurrence === 'MONTHLY'
-                      ? new Date(now.getFullYear(), now.getMonth(), 1)
-                      : new Date(0); // ONCE → all of history
-                const hasCategoryFilter = (b.categories?.length ?? 0) > 0;
-                const inScope = transactions.filter(t => {
-                  if (t.type !== 'EXPENSE') return false;
-                  if (t.date < periodStart) return false;
-                  if (b.wallets !== 'ALL' && !b.wallets.includes(t.walletId)) return false;
-                  if (hasCategoryFilter && !b.categories.includes(t.category)) return false;
-                  return true;
-                });
-                const realSpend = inScope.reduce((a, c) => a + c.amount, 0);
-                const p = Math.min(realSpend / b.amount, 1);
-                const overBudget = p > 0.8;
-                const periodLabel =
-                  b.recurrence === 'DAILY' ? 'Today'
-                    : b.recurrence === 'MONTHLY' ? 'This month'
-                      : 'All-time';
-                return (
-                  <GradientCard key={b.id} padding="md" radius="row">
-                    <View className="flex-row justify-between mb-2">
-                      <View style={{ flex: 1 }}>
-                        <Text className="font-jakarta-bold text-text-high text-base">{b.name}</Text>
-                        <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mt-1">
-                          {periodLabel}
-                          {hasCategoryFilter ? ` · ${b.categories.length} ${b.categories.length === 1 ? 'category' : 'categories'}` : ''}
-                        </Text>
-                      </View>
-                      <View className="items-end">
-                        <Text className="font-jakarta-bold text-text-high text-base">
-                          ${realSpend.toFixed(0)}
-                        </Text>
-                        <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mt-1">
-                          of ${b.amount}
-                        </Text>
-                      </View>
-                    </View>
-                    {/* Show the actual tracked category names below the
-                        name when the picker selected just a few — keeps
-                        the user honest about what counts. Trims to
-                        keep the row from wrapping into a fourth line. */}
-                    {hasCategoryFilter && (
-                      <Text className="font-jakarta text-text-low text-[11px] mb-3" numberOfLines={1}>
-                        {b.categories.slice(0, 4).join(' · ')}
-                        {b.categories.length > 4 ? ` · +${b.categories.length - 4} more` : ''}
-                      </Text>
-                    )}
-                    <View className="h-2.5 bg-surface-3 rounded-full overflow-hidden mt-1">
-                      <View
-                        className="h-full rounded-full"
-                        style={{
-                          width: `${p * 100}%`,
-                          backgroundColor: overBudget ? '#FF5C7C' : '#FF6B4A',
-                        }}
-                      />
-                    </View>
-                  </GradientCard>
-                );
-              })}
+              {activeBudgets
+                // DAILY budgets only make sense for the current
+                // month — backfilling "today's cap" against a past
+                // month would produce nonsense numbers. Hide them
+                // when scrolled into history; MONTHLY + ONCE stay
+                // visible and scope cleanly to the selected month.
+                .filter((b) => isCurrentMonth || b.recurrence !== 'DAILY')
+                .map((b) => {
+                  const hasCategoryFilter = (b.categories?.length ?? 0) > 0;
+                  // All cards now scope to the SELECTED month, not
+                  // "right now". For ONCE budgets we still take the
+                  // full lifetime up to the end of the picked month,
+                  // so picking April shows the running total as of
+                  // April 30 — that's what "ONCE budget in April"
+                  // intuitively means.
+                  const scopeStart =
+                    b.recurrence === 'ONCE' ? new Date(0) : monthRange.start;
+                  const inScope = transactions.filter((t) => {
+                    if (t.type !== 'EXPENSE') return false;
+                    if (t.date < scopeStart || t.date >= monthRange.end) return false;
+                    if (b.wallets !== 'ALL' && !b.wallets.includes(t.walletId)) return false;
+                    if (hasCategoryFilter && !b.categories.includes(t.category)) return false;
+                    return true;
+                  });
+                  const realSpend = inScope.reduce((a, c) => a + c.amount, 0);
+                  const budgetAmount = getBudgetAmountForMonth(b, selectedMonth);
+                  const p = budgetAmount > 0 ? Math.min(realSpend / budgetAmount, 1) : 0;
+                  const overBudget = p > 0.8;
+                  const periodLabel =
+                    b.recurrence === 'DAILY'
+                      ? 'Today'
+                      : b.recurrence === 'MONTHLY'
+                        ? monthYearDisplay(selectedMonth)
+                        : 'All-time';
+                  return (
+                    <Pressable key={b.id} onPress={() => setEditingBudget(b)}>
+                      <GradientCard padding="md" radius="row">
+                        <View className="flex-row justify-between mb-2">
+                          <View style={{ flex: 1 }}>
+                            <Text className="font-jakarta-bold text-text-high text-base">{b.name}</Text>
+                            <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mt-1">
+                              {periodLabel}
+                              {hasCategoryFilter ? ` · ${b.categories.length} ${b.categories.length === 1 ? 'category' : 'categories'}` : ''}
+                            </Text>
+                          </View>
+                          <View className="items-end">
+                            <Text className="font-jakarta-bold text-text-high text-base">
+                              ${realSpend.toFixed(0)}
+                            </Text>
+                            <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mt-1">
+                              of ${budgetAmount}
+                            </Text>
+                          </View>
+                        </View>
+                        {hasCategoryFilter && (
+                          <Text className="font-jakarta text-text-low text-[11px] mb-3" numberOfLines={1}>
+                            {b.categories.slice(0, 4).join(' · ')}
+                            {b.categories.length > 4 ? ` · +${b.categories.length - 4} more` : ''}
+                          </Text>
+                        )}
+                        <View className="h-2.5 bg-surface-3 rounded-full overflow-hidden mt-1">
+                          <View
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${p * 100}%`,
+                              backgroundColor: overBudget ? '#FF5C7C' : '#FF6B4A',
+                            }}
+                          />
+                        </View>
+                      </GradientCard>
+                    </Pressable>
+                  );
+                })}
             </View>
           )}
 
-          {/* Untracked spend: surfaces this-month EXPENSE that NO
-              budget's category list covers. Answers the user's
-              "where is the rest of my spending going?" question
-              and makes the gap obvious so they're nudged to add a
-              budget for it. Only renders when there's actually
-              untracked spend to report. */}
+          {/* Untracked spend: EXPENSE rows in the SELECTED month that
+              no budget's category list covers. Helps answer "where
+              is the rest of my spending going for this month?". */}
           {(() => {
-            const monthStart = new Date();
-            monthStart.setDate(1);
-            monthStart.setHours(0, 0, 0, 0);
             const trackedCategories = new Set<string>(
               activeBudgets.flatMap((b) => b.categories ?? []),
             );
-            const untracked = transactions
-              .filter(
-                (t) =>
-                  t.type === 'EXPENSE' &&
-                  t.date >= monthStart &&
-                  !trackedCategories.has(t.category),
-              )
+            const untracked = monthTxs
+              .filter((t) => t.type === 'EXPENSE' && !trackedCategories.has(t.category))
               .reduce((a, c) => a + c.amount, 0);
             if (untracked <= 0 || activeBudgets.length === 0) return null;
             return (
@@ -295,7 +349,7 @@ export default function AnalyticsScreen() {
                       </View>
                       <View>
                         <Text className="font-jakarta-bold text-text-high text-sm">
-                          Untracked this month
+                          Untracked {isCurrentMonth ? 'this month' : `in ${monthYearDisplay(selectedMonth)}`}
                         </Text>
                         <Text className="font-jakarta text-text-low text-[11px] mt-0.5">
                           No budget covers these categories yet.
@@ -335,6 +389,11 @@ export default function AnalyticsScreen() {
       </ScrollView>
 
       <CreateBudgetModal visible={budgetModalVisible} onClose={() => setBudgetModalVisible(false)} />
+      <EditBudgetModal
+        visible={editingBudget !== null}
+        budget={editingBudget}
+        onClose={() => setEditingBudget(null)}
+      />
     </Surface>
   );
 }

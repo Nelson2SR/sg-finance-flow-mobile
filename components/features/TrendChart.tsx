@@ -9,16 +9,16 @@ const CHART_WIDTH = SCREEN_WIDTH - 48;
 const CHART_HEIGHT = 160;
 
 /**
- * Bucket the user's last 6 months of transactions into income/expense
- * pairs for the bar chart. Anchored to today so the rightmost bar is
- * always the current month — that lets the "vs Prev Period" delta line
- * up with the visible recent vs older 3-month halves.
+ * Bucket transactions into income/expense pairs for the 6-month bar
+ * chart. The rightmost bar is the `anchorMonth` (the month the user
+ * picked in Insights, defaults to today) — that keeps the "vs Prev
+ * Period" delta meaningfully scoped to the half-windows the user
+ * actually sees.
  */
-function build6MonthSeries(transactions: Transaction[]) {
-  const now = new Date();
+function build6MonthSeries(transactions: Transaction[], anchorMonth: Date) {
   const buckets: { month: string; income: number; expense: number }[] = [];
   for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const d = new Date(anchorMonth.getFullYear(), anchorMonth.getMonth() - i, 1);
     buckets.push({
       month: d.toLocaleDateString('en-US', { month: 'short' }),
       income: 0,
@@ -26,10 +26,12 @@ function build6MonthSeries(transactions: Transaction[]) {
     });
   }
   // O(N) over all txs — fine even at thousands of rows; only the last
-  // 6 buckets are addressable so anything older silently drops out.
-  const firstBucketStart = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+  // 6 buckets are addressable so anything outside the window silently
+  // drops out.
+  const firstBucketStart = new Date(anchorMonth.getFullYear(), anchorMonth.getMonth() - 5, 1);
+  const afterLastBucket = new Date(anchorMonth.getFullYear(), anchorMonth.getMonth() + 1, 1);
   for (const tx of transactions) {
-    if (tx.date < firstBucketStart) continue;
+    if (tx.date < firstBucketStart || tx.date >= afterLastBucket) continue;
     const idx =
       (tx.date.getFullYear() - firstBucketStart.getFullYear()) * 12 +
       (tx.date.getMonth() - firstBucketStart.getMonth());
@@ -50,10 +52,30 @@ function computeMomentumDelta(buckets: { income: number; expense: number }[]): n
   return ((recent - prior) / Math.abs(prior)) * 100;
 }
 
-export const TrendChart = () => {
+interface TrendChartProps {
+  /**
+   * Month the rightmost bar represents. ISO `YYYY-MM` form, e.g.
+   * `'2026-04'`. Defaults to the current month when omitted, which
+   * preserves the original Home behaviour. Insights passes the
+   * value from its month picker so scrolling the picker scrolls the
+   * 6-month window with it.
+   */
+  anchorMonth?: string;
+}
+
+export const TrendChart = ({ anchorMonth }: TrendChartProps = {}) => {
   const transactions = useFinanceStore(s => s.transactions);
 
-  const buckets = useMemo(() => build6MonthSeries(transactions), [transactions]);
+  const anchorDate = useMemo(() => {
+    if (!anchorMonth) return new Date();
+    const [y, m] = anchorMonth.split('-').map(Number);
+    return new Date(y, m - 1, 1);
+  }, [anchorMonth]);
+
+  const buckets = useMemo(
+    () => build6MonthSeries(transactions, anchorDate),
+    [transactions, anchorDate],
+  );
   const months = buckets.map(b => b.month);
   const data = buckets.map(b => [b.income, b.expense] as [number, number]);
   const maxVal = Math.max(1, ...data.flat());

@@ -111,26 +111,44 @@ function buildSeedTransactions(): Transaction[] {
   return txs.map((tx, idx) => ({ ...tx, id: `dev-tx-${idx}` }));
 }
 
-const SEED_BUDGETS: Budget[] = [
-  {
-    id: 'dev-budget-1',
-    name: 'Dining out',
-    amount: 3_000,
-    currency: 'SGD',
-    recurrence: 'MONTHLY',
-    wallets: 'ALL',
-    categories: ['Food & Drink'],
-  },
-  {
-    id: 'dev-budget-2',
-    name: 'Shopping',
-    amount: 5_000,
-    currency: 'SGD',
-    recurrence: 'MONTHLY',
-    wallets: 'ALL',
-    categories: ['Shopping'],
-  },
-];
+/**
+ * Seed budgets get a small two-version history so the Insights
+ * month picker has something to demonstrate: the "Dining out" cap
+ * stepped down from $3,500 → $3,000 a few months back, and
+ * "Shopping" held steady. Scroll back to an older month and the
+ * historical amount renders.
+ */
+function buildSeedBudgets(): Budget[] {
+  const now = new Date();
+  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  const fourMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 4, 1);
+  const oldMonth = `${fourMonthsAgo.getFullYear()}-${String(fourMonthsAgo.getMonth() + 1).padStart(2, '0')}-01`;
+  return [
+    {
+      id: 'dev-budget-1',
+      name: 'Dining out',
+      currency: 'SGD',
+      recurrence: 'MONTHLY',
+      wallets: 'ALL',
+      categories: ['Food & Drink'],
+      versions: [
+        { effectiveFrom: oldMonth, amount: 3_500 },
+        { effectiveFrom: thisMonth, amount: 3_000 },
+      ],
+    },
+    {
+      id: 'dev-budget-2',
+      name: 'Shopping',
+      currency: 'SGD',
+      recurrence: 'MONTHLY',
+      wallets: 'ALL',
+      categories: ['Shopping'],
+      versions: [{ effectiveFrom: oldMonth, amount: 5_000 }],
+    },
+  ];
+}
+
+const SEED_BUDGETS: Budget[] = buildSeedBudgets();
 
 export const DEV_SEED = {
   wallets: SEED_WALLETS,

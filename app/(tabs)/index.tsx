@@ -29,9 +29,8 @@ import { MagicScanReviewModal } from '../../components/features/MagicScanModal';
 import { financeApi } from '../../services/apiClient';
 import { useAuth } from '../../context/AuthContext';
 import { DEV_DISABLE_AUTH } from '../../constants/Config';
-import { GradientCard, NeonButton, Skeleton, SkeletonRow, Surface, SurfaceHeaderArea } from '../../components/ui';
+import { GradientCard, NeonButton, Skeleton, Surface, SurfaceHeaderArea } from '../../components/ui';
 import { useThemeColors } from '../../hooks/use-theme-colors';
-import { resolveCategoryStyle, tintWithAlpha } from '../../lib/categoryStyle';
 import { AvatarStack } from '../../components/features/AvatarStack';
 import { useVaultGroupsStore } from '../../store/useVaultGroupsStore';
 
@@ -123,8 +122,6 @@ export default function HomeScreen() {
       syncCategoriesFromBackend();
     }
   }, [isAuthenticated]);
-
-  const localTransactions = transactions.filter(t => t.walletId === activeWalletId).slice(0, 5);
 
   const extendedWallets = [
     ...wallets,
@@ -556,87 +553,26 @@ export default function HomeScreen() {
         <View className="px-6">
           <TrendChart />
 
-          {/* Category donut chart — only shown when the user has at
-              least one wallet, because the chart is per-wallet view and
-              the onboarding checklist owns the empty-state for new
-              users. Filters to the active wallet's expenses. */}
+          {/* Two pies — Spend then Income — both for the previous
+              calendar month. Symmetric windows make the side-by-side
+              comparison meaningful. Hidden until the user has at
+              least one wallet so the onboarding checklist owns the
+              cold start. Filters to the active wallet. */}
           {wallets.length > 0 && (
-            <CategoryDonut
-              transactions={transactions.filter((t) => t.walletId === activeWalletId)}
-              categories={categoriesByKind}
-            />
-          )}
-
-          <View className="flex-row justify-between items-center mb-5">
-            <Text className="font-jakarta-bold text-text-high text-xl">Wallet Activity</Text>
-            <Pressable onPress={() => router.push('/(tabs)/transactions')}>
-              <Text className="font-jakarta-bold text-accent-coral tracking-wide">See All</Text>
-            </Pressable>
-          </View>
-
-          {isSyncing && !hasSynced ? (
-            <View className="gap-3">
-              {[0, 1, 2].map(i => (
-                <GradientCard key={i} padding="md" radius="row">
-                  <View className="flex-row items-center gap-4">
-                    <Skeleton width={44} height={44} radius={14} />
-                    <View style={{ flex: 1 }}>
-                      <SkeletonRow lines={2} />
-                    </View>
-                    <Skeleton width={60} height={18} />
-                  </View>
-                </GradientCard>
-              ))}
-            </View>
-          ) : localTransactions.length === 0 ? (
-            <GradientCard padding="lg" radius="row">
-              <View className="items-center justify-center py-6">
-                <Ionicons name="leaf-outline" size={28} color={themeColors.textLow} />
-                <Text className="font-jakarta-bold text-text-low text-sm mt-3">
-                  No activity in this wallet.
-                </Text>
-              </View>
-            </GradientCard>
-          ) : (
-            <View className="gap-3">
-              {localTransactions.map(tx => {
-                const icon = resolveCategoryStyle(tx.category, categoriesByKind);
-                const isIncome = tx.type === 'INCOME';
-                return (
-                  <GradientCard key={tx.id} padding="md" radius="row">
-                    <View className="flex-row justify-between items-center">
-                      <View className="flex-row items-center gap-4">
-                        <View
-                          className="w-11 h-11 rounded-2xl justify-center items-center"
-                          style={{
-                            backgroundColor: tintWithAlpha(icon.tint, 0.14),
-                            borderWidth: 1,
-                            borderColor: tintWithAlpha(icon.tint, 0.32),
-                          }}>
-                          <Ionicons name={icon.name as any} size={18} color={icon.tint} />
-                        </View>
-                        <View>
-                          <Text className="font-jakarta-bold text-text-high text-base">
-                            {tx.merchant}
-                          </Text>
-                          <Text
-                            className="font-jakarta-bold text-[10px] mt-0.5 uppercase tracking-widest"
-                            style={{ color: icon.tint }}>
-                            {tx.category}
-                          </Text>
-                        </View>
-                      </View>
-                      <Text
-                        className={`font-jakarta-bold tracking-wide text-base ${
-                          isIncome ? 'text-accent-mint' : 'text-text-high'
-                        }`}>
-                        {isIncome ? '+' : '-'}${tx.amount.toFixed(2)}
-                      </Text>
-                    </View>
-                  </GradientCard>
-                );
-              })}
-            </View>
+            <>
+              <CategoryDonut
+                transactions={transactions.filter((t) => t.walletId === activeWalletId)}
+                categories={categoriesByKind}
+                txType="EXPENSE"
+                window="last-month"
+              />
+              <CategoryDonut
+                transactions={transactions.filter((t) => t.walletId === activeWalletId)}
+                categories={categoriesByKind}
+                txType="INCOME"
+                window="last-month"
+              />
+            </>
           )}
         </View>
       </ScrollView>

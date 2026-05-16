@@ -16,10 +16,26 @@ export interface Wallet {
   currency: string;
 }
 
+/**
+ * One amount-version of a budget. Each row says "starting on this
+ * date, the budget is N dollars". Budgets keep an append-only history
+ * so editing a MONTHLY budget never retro-changes past months —
+ * matches the YNAB / Monarch / Copilot Money convention.
+ *
+ * `effectiveFrom` is always the first day of a calendar month
+ * (`YYYY-MM-01`). We don't support mid-month edits at the data
+ * layer; the UI snaps to the current month's start when the user
+ * saves an edit.
+ */
+export interface BudgetVersion {
+  /** ISO date string `YYYY-MM-DD`, always the first of a month. */
+  effectiveFrom: string;
+  amount: number;
+}
+
 export interface Budget {
   id: string;
   name: string;
-  amount: number;
   currency: string;
   recurrence: 'DAILY' | 'MONTHLY' | 'ONCE';
   wallets: string[] | 'ALL';
@@ -32,6 +48,44 @@ export interface Budget {
    * behaviour without breaking those rows.
    */
   categories: string[];
+  /**
+   * Amount history, sorted ascending by `effectiveFrom`. Always
+   * contains at least one entry. Lookups for a specific month go
+   * through `getBudgetAmountForMonth` — that helper picks the
+   * latest version whose `effectiveFrom <= the month's first day`.
+   */
+  versions: BudgetVersion[];
+}
+
+/** First day of a month code (`YYYY-MM`) as ISO `YYYY-MM-DD`. */
+function monthCodeToFirstDay(monthCode: string): string {
+  return `${monthCode}-01`;
+}
+
+/** Today's month as `YYYY-MM`. */
+export function currentMonthCode(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/**
+ * Look up the dollar amount that was active for a given month.
+ * Picks the latest version with `effectiveFrom <= first day of the
+ * requested month`. Falls back to the earliest version when the
+ * requested month predates the budget — that way a user who creates
+ * a budget in May then scrolls Insights back to March still sees a
+ * sensible number (the budget's first-recorded amount) rather than a
+ * zero that looks like missing data.
+ */
+export function getBudgetAmountForMonth(budget: Budget, monthCode: string): number {
+  if (budget.versions.length === 0) return 0;
+  const target = monthCodeToFirstDay(monthCode);
+  let chosen = budget.versions[0].amount;
+  for (const v of budget.versions) {
+    if (v.effectiveFrom <= target) chosen = v.amount;
+    else break;
+  }
+  return chosen;
 }
 
 export interface Transaction {
@@ -71,7 +125,23 @@ interface FinanceState {
   // Actions
   setActiveWallet: (id: string) => void;
   addWallet: (wallet: Omit<Wallet, 'id'>) => void;
-  addBudget: (budget: Omit<Budget, 'id'>) => void;
+  /**
+   * Create a new budget. Callers pass a single `amount` which the
+   * store wraps into the initial `versions: [{ effectiveFrom, amount }]`
+   * anchored to the first of the current month. After creation, use
+   * `updateBudgetAmount` to record subsequent changes.
+   */
+  addBudget: (input: Omit<Budget, 'id' | 'versions'> & { amount: number }) => void;
+  /**
+   * Record a new amount for `id`, effective from the first of the
+   * current month. If a version already exists for the current
+   * month, that row is replaced (so multiple edits in the same
+   * month collapse to the most recent value). Past months always
+   * stay frozen at whatever version was active then.
+   */
+  updateBudgetAmount: (id: string, amount: number) => void;
+  /** Hard-delete a budget. No soft-delete / archive in v1.0. */
+  deleteBudget: (id: string) => void;
   addTransaction: (tx: Omit<Transaction, 'id' | 'date'> & { date?: Date }, skipSync?: boolean) => void;
   addTransactionsBatch: (
     txs: (Omit<Transaction, 'id' | 'date'> & { date?: Date })[],
@@ -126,8 +196,35 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     wallets: [...state.wallets, { ...wallet, id: mintId('w') }]
   })),
 
-  addBudget: (budget) => set((state) => ({
-     budgets: [...state.budgets, { ...budget, id: mintId('b') }]
+  addBudget: ({ amount, ...rest }) => set((state) => {
+    const effectiveFrom = monthCodeToFirstDay(currentMonthCode());
+    return {
+      budgets: [
+        ...state.budgets,
+        { ...rest, id: mintId('b'), versions: [{ effectiveFrom, amount }] },
+      ],
+    };
+  }),
+
+  updateBudgetAmount: (id, amount) => set((state) => {
+    const currentEffective = monthCodeToFirstDay(currentMonthCode());
+    return {
+      budgets: state.budgets.map((b) => {
+        if (b.id !== id) return b;
+        // Drop any version already at this month's start so a
+        // user editing twice in the same month collapses cleanly
+        // to the latest value (no orphan version that's never
+        // looked up).
+        const trimmed = b.versions.filter((v) => v.effectiveFrom !== currentEffective);
+        const nextVersions = [...trimmed, { effectiveFrom: currentEffective, amount }];
+        nextVersions.sort((a, c) => a.effectiveFrom.localeCompare(c.effectiveFrom));
+        return { ...b, versions: nextVersions };
+      }),
+    };
+  }),
+
+  deleteBudget: (id) => set((state) => ({
+    budgets: state.budgets.filter((b) => b.id !== id),
   })),
 
   addTransaction: (tx, skipSync = false) => set((state) => {
@@ -242,23 +339,24 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       // 200ms before data lands.
       set({ isSyncing: false, hasSynced: true });
 
-      // Dev-only convenience: if the user has nothing in their account
-      // (empty backend, App Review demo, fresh signup) AND we're in a
-      // dev build, populate from devSeedData so every screen renders
-      // populated UI. Real data always wins — the moment a real wallet
-      // lands in the store, this branch is dead. Lazy-imported so the
-      // production bundle tree-shakes the seed strings out entirely.
-      if (__DEV__) {
-        const s = get();
-        if (s.wallets.length === 0 && s.transactions.length === 0) {
-          const { DEV_SEED } = await import('../lib/devSeedData');
-          set({
-            wallets: [...DEV_SEED.wallets],
-            transactions: [...DEV_SEED.transactions],
-            budgets: [...DEV_SEED.budgets],
-            activeWalletId: DEV_SEED.activeWalletId,
-          });
-        }
+      // Dev convenience: when running under Metro dev mode (the
+      // normal `npm run ios` flow), populate the store from
+      // devSeedData if the user has no transactions, so the design /
+      // interaction surfaces have data to render. Gated by
+      // `__DEV__` — Metro inlines that to `false` in production
+      // bundles and the entire branch is tree-shaken out by the
+      // minifier, so EAS production binaries never see seed data.
+      //
+      // The moment the user adds even one real transaction, this
+      // branch goes cold and stays cold.
+      if (__DEV__ && get().transactions.length === 0) {
+        const { DEV_SEED } = await import('../lib/devSeedData');
+        set({
+          wallets: [...DEV_SEED.wallets],
+          transactions: [...DEV_SEED.transactions],
+          budgets: [...DEV_SEED.budgets],
+          activeWalletId: DEV_SEED.activeWalletId,
+        });
       }
     }
   },
