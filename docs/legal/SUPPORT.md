@@ -2,7 +2,7 @@
 
 > Quick answers below. If yours isn't here, email us and we'll get back within 1–2 business days.
 
-**Email:** support@sgfinanceflow.com
+**Email:** wowstorm99@gmail.com
 
 ---
 
@@ -18,7 +18,7 @@
 
 - We support DBS, OCBC, UOB, Citi out of the box. Other banks may work but aren't tested.
 - If your PDF is password-protected, you'll be prompted for the password on first import. The password lives only in your iPhone's Keychain — we never see it.
-- If parsing fails repeatedly on a real statement, email the file to support@sgfinanceflow.com (or, for privacy, redact the account number first). We'll add the bank to our extractor.
+- If parsing fails repeatedly on a real statement, email the file to wowstorm99@gmail.com (or, for privacy, redact the account number first). We'll add the bank to our extractor.
 
 ### How do I share my vault with my partner / family?
 
@@ -35,7 +35,7 @@
 ### How do I delete my account?
 
 - Settings → Account → **Sign out everywhere**. This wipes your tokens immediately and schedules full account deletion within 7 days.
-- To accelerate, email support@sgfinanceflow.com with the phone number you registered with.
+- To accelerate, email wowstorm99@gmail.com with the phone number you registered with.
 
 ### Is my data shared with anyone?
 
@@ -61,7 +61,7 @@ Settings → Face ID & Passcode → ensure VaultWise is enabled in the app list.
 
 ## Reporting a bug
 
-Email support@sgfinanceflow.com with:
+Email wowstorm99@gmail.com with:
 
 - iOS version (Settings → General → About)
 - App version (Settings → scroll to bottom)
@@ -72,8 +72,8 @@ Logs that contain personal data are kept for 90 days then deleted automatically.
 
 ## Reporting a security issue
 
-If you think you've found a security vulnerability, please email **security@sgfinanceflow.com** rather than filing a public issue. We'll respond within 48 hours.
+If you think you've found a security vulnerability, please email **wowstorm99@gmail.com** with the subject line `SECURITY:` rather than filing a public issue. We'll respond within 48 hours.
 
 ## Feedback / feature requests
 
-Same email: support@sgfinanceflow.com. We read everything; we just can't always promise a timeline.
+Same email: wowstorm99@gmail.com. We read everything; we just can't always promise a timeline.

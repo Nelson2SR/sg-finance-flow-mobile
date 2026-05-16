@@ -84,8 +84,8 @@ GUIDELINE 4.8 — Third-party login
 
 CONTACT FOR REVIEW QUESTIONS
 
-  Name:   [Your name]
-  Email:  appreview@sgfinanceflow.com   (route to the dev team)
+  Name:   Su Rong
+  Email:  wowstorm99@gmail.com
   Phone:  [optional]
 ```
 
@@ -172,17 +172,17 @@ Result: **Rated 4+**
 - [ ] `APP_REVIEW_OTP=123456` set on the production backend (env var)
 - [ ] Verified with `curl`:
   ```
-  curl -sX POST https://api.sgfinanceflow.com/api/v1/auth/phone/request \
+  curl -sX POST https://vaultwise-api.onrender.com/api/v1/auth/phone/request \
     -H "Content-Type: application/json" \
     -d '{"phone":"+6512345678"}'
   # → {"status":"sent"}
 
-  curl -sX POST https://api.sgfinanceflow.com/api/v1/auth/phone/verify \
+  curl -sX POST https://vaultwise-api.onrender.com/api/v1/auth/phone/verify \
     -H "Content-Type: application/json" \
     -d '{"phone":"+6512345678","otp":"123456"}'
   # → {"user_exists": false, "signup_token": "...", "phone": "+6512345678"}
   ```
-- [ ] Production backend is on HTTPS with TLS 1.3 (verify: `nmap --script ssl-enum-ciphers -p 443 api.sgfinanceflow.com`)
+- [ ] Production backend is on HTTPS with TLS 1.3 (verify: `nmap --script ssl-enum-ciphers -p 443 vaultwise-api.onrender.com`)
 - [ ] Privacy policy is reachable at the URL provided in ASC
 - [ ] Support URL is reachable at the URL provided in ASC
 - [ ] Rotate or remove the `APP_REVIEW_PHONE` / `APP_REVIEW_OTP` env vars **once the app is approved and live** — leaving them in production is a permanent backdoor.

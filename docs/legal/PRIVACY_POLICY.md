@@ -2,8 +2,8 @@
 
 **Effective date:** 2026-05-16
 **App:** VaultWise (iOS · App Store)
-**Operator:** [Your legal entity — fill in before launch]
-**Contact:** privacy@sgfinanceflow.com  *(replace with a working address)*
+**Operator:** Su Rong (individual developer, Singapore)
+**Contact:** wowstorm99@gmail.com
 
 > This document explains what data VaultWise collects, how we use
 > it, who else sees it, and the choices you have. Plain language —
@@ -69,7 +69,7 @@ Google Gemini's data handling for paid API customers: input is **not used for mo
 
 You can, at any time:
 
-- **See your data** — email privacy@sgfinanceflow.com; we'll send a JSON export within 30 days.
+- **See your data** — email wowstorm99@gmail.com; we'll send a JSON export within 30 days.
 - **Delete your account** — Settings → Account → Sign out everywhere also schedules account deletion (transactions + identity link + auth tokens) within 7 days. To accelerate, email us.
 - **Correct data** — edit your display name in Settings; edit transactions in the Transactions tab; delete categorisation rules in Vault Config.
 - **Withdraw consent** — uninstall the app. To also delete the server-side copy, email us.
@@ -86,6 +86,6 @@ If we materially change how we handle your data, we will notify you in the app a
 
 ## 8. Contact
 
-- **Email:** privacy@sgfinanceflow.com
-- **Postal:** [Add your registered business address here before launch]
-- **Data Protection Officer:** [Add name or "owner" for solo operations]
+- **Email:** wowstorm99@gmail.com
+- **Postal:** 12A Hougang Street 11, Singapore 534074
+- **Data Protection Officer:** Su Rong (sole owner / operator)
