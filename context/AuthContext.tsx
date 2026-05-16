@@ -11,6 +11,8 @@ import {
   setTokens,
 } from '../lib/secureStore';
 import { useVaultGroupsStore } from '../store/useVaultGroupsStore';
+import { useFinanceStore } from '../store/useFinanceStore';
+import { useCategoriesStore } from '../store/useCategoriesStore';
 import { onAuthFailed } from '../services/apiClient';
 import {
   AuthResponse,
@@ -104,6 +106,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const login = async (resp: AuthResponse) => {
+    // Privacy hygiene: any time the authenticated user changes (sign
+    // in as a different account, or first sign-in after sign-out),
+    // wipe every locally-cached data store so the first frame of
+    // /(tabs) shows the new user's empty state — never the previous
+    // user's wallets / transactions / categories. Without this we
+    // had a ~200ms flash of stale data after signup landed on Home
+    // before syncData replaced it.
+    const isAccountSwitch = user?.id !== resp.user.id;
+    if (isAccountSwitch) {
+      useFinanceStore.setState({
+        wallets: [],
+        transactions: [],
+        budgets: [],
+        activeWalletId: null,
+        hasSynced: false,
+        isSyncing: false,
+      });
+      useCategoriesStore.setState({ categories: [], labels: [] });
+      useVaultGroupsStore.setState({ groups: [], activeGroupId: null });
+    }
+
     await setTokens({
       accessToken: resp.access_token,
       refreshToken: resp.refresh_token,
@@ -161,6 +184,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     setAccessToken(null);
     setRefreshToken(null);
+    // Clear every in-memory store so the login screen renders cleanly
+    // and the next login starts from a true empty state.
+    useFinanceStore.setState({
+      wallets: [],
+      transactions: [],
+      budgets: [],
+      activeWalletId: null,
+      hasSynced: false,
+      isSyncing: false,
+    });
+    useCategoriesStore.setState({ categories: [], labels: [] });
+    useVaultGroupsStore.setState({ groups: [], activeGroupId: null });
   };
 
   return (

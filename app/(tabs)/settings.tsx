@@ -167,7 +167,16 @@ export default function SettingsScreen() {
                   <ActivityIndicator size="small" color="#FF6B4A" />
                 )}
                 <TextInput
-                  className="text-text-high font-jakarta-bold text-sm text-right min-w-[120px]"
+                  className="text-text-high font-jakarta-bold text-sm text-right min-w-[140px]"
+                  style={{
+                    // Explicit height + vertical padding so the iOS
+                    // TextInput renders descenders fully — without this
+                    // "g" / "p" / "y" got clipped flush with the row
+                    // baseline in production.
+                    minHeight: 32,
+                    paddingVertical: 6,
+                    includeFontPadding: false as any,
+                  }}
                   value={nameDraft}
                   onChangeText={setNameDraft}
                   onBlur={commitName}

@@ -20,6 +20,7 @@ import { useFinanceStore } from '../../store/useFinanceStore';
 import { TransactionAdderModal } from '../../components/features/TransactionAdderModal';
 import { CreateVaultModal } from '../../components/features/CreateVaultModal';
 import { TrendChart } from '../../components/features/TrendChart';
+import { CategoryDonut } from '../../components/features/CategoryDonut';
 import { MagicScanWindow } from '../../components/features/MagicScanWindow';
 import { scanDocumentWithGemini, ScanResponse, ScannedTransaction, ScanTaxonomy } from '../../services/geminiService';
 import { parsePdfWithPasswordFlow } from '../../services/uploadService';
@@ -554,6 +555,17 @@ export default function HomeScreen() {
 
         <View className="px-6">
           <TrendChart />
+
+          {/* Category donut chart — only shown when the user has at
+              least one wallet, because the chart is per-wallet view and
+              the onboarding checklist owns the empty-state for new
+              users. Filters to the active wallet's expenses. */}
+          {wallets.length > 0 && (
+            <CategoryDonut
+              transactions={transactions.filter((t) => t.walletId === activeWalletId)}
+              categories={categoriesByKind}
+            />
+          )}
 
           <View className="flex-row justify-between items-center mb-5">
             <Text className="font-jakarta-bold text-text-high text-xl">Wallet Activity</Text>

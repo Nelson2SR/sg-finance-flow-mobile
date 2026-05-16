@@ -50,7 +50,8 @@
         }
       ],
       "expo-web-browser",
-      "expo-secure-store"
+      "expo-secure-store",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -62,6 +63,12 @@
         "projectId": "b17b0a55-54d0-4dd3-ad51-f9fba5b2b36c"
       }
     },
-    "owner": "nelson2sr"
+    "owner": "nelson2sr",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/b17b0a55-54d0-4dd3-ad51-f9fba5b2b36c"
+    }
   }
 }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, View, Text, Pressable, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import { ActivityIndicator, Alert, View, Text, Pressable, TextInput, Modal, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 
@@ -21,6 +21,23 @@ const TYPES: { id: VaultType; label: string; icon: keyof typeof Ionicons.glyphMa
   { id: 'CRYPTO', label: 'Crypto', icon: 'logo-bitcoin', tint: '#FFB547' },
 ];
 
+// Currencies surfaced in the picker. Singapore-first (SGD), then the
+// majors a Singaporean traveller/investor is most likely to track. The
+// backend stores the 3-letter ISO code as-is — any value matching
+// `^[A-Z]{3}$` is accepted, so this is a UI affordance, not a contract.
+const CURRENCIES: { code: string; symbol: string; label: string }[] = [
+  { code: 'SGD', symbol: 'S$',  label: 'Singapore Dollar' },
+  { code: 'USD', symbol: '$',   label: 'US Dollar' },
+  { code: 'CNY', symbol: '¥',   label: 'Chinese Yuan' },
+  { code: 'MYR', symbol: 'RM',  label: 'Malaysian Ringgit' },
+  { code: 'JPY', symbol: '¥',   label: 'Japanese Yen' },
+  { code: 'EUR', symbol: '€',   label: 'Euro' },
+  { code: 'GBP', symbol: '£',   label: 'British Pound' },
+  { code: 'HKD', symbol: 'HK$', label: 'Hong Kong Dollar' },
+  { code: 'AUD', symbol: 'A$',  label: 'Australian Dollar' },
+  { code: 'TWD', symbol: 'NT$', label: 'Taiwan Dollar' },
+];
+
 export const CreateVaultModal = ({ visible, onClose }: Props) => {
   const themeColors = useThemeColors();
   const syncData = useFinanceStore(s => s.syncData);
@@ -28,7 +45,7 @@ export const CreateVaultModal = ({ visible, onClose }: Props) => {
 
   const [name, setName] = useState('');
   const [type, setType] = useState<VaultType>('PERSONAL');
-  const [currency] = useState('SGD');
+  const [currency, setCurrency] = useState('SGD');
   const [nameFocused, setNameFocused] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -98,7 +115,7 @@ export const CreateVaultModal = ({ visible, onClose }: Props) => {
           <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-2">
             Wallet Type
           </Text>
-          <View className="flex-row flex-wrap gap-3 mb-10">
+          <View className="flex-row flex-wrap gap-3 mb-6">
             {TYPES.map(t => {
               const selected = type === t.id;
               return (
@@ -117,6 +134,41 @@ export const CreateVaultModal = ({ visible, onClose }: Props) => {
               );
             })}
           </View>
+
+          <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-2">
+            Currency
+          </Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 8, paddingRight: 16 }}
+            className="mb-10">
+            {CURRENCIES.map((c) => {
+              const selected = currency === c.code;
+              return (
+                <Pressable
+                  key={c.code}
+                  onPress={() => setCurrency(c.code)}
+                  className={`px-4 py-3 rounded-2xl flex-row items-center gap-2 border ${
+                    selected
+                      ? 'bg-accent-coral border-accent-coral'
+                      : 'bg-surface-2 border-hairline'
+                  }`}
+                  style={selected ? { boxShadow: '0 0 14px rgba(255, 107, 74, 0.4)' } : null}>
+                  <Text
+                    className={`font-jakarta-bold text-sm ${selected ? 'text-white' : 'text-text-mid'}`}>
+                    {c.symbol}
+                  </Text>
+                  <Text
+                    className={`font-jakarta-bold text-xs tracking-widest ${
+                      selected ? 'text-white' : 'text-text-low'
+                    }`}>
+                    {c.code}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
 
           <Pressable
             onPress={handleSave}

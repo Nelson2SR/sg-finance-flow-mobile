@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, Pressable, Modal, ScrollView } from 'react-native';
+import { View, Text, Pressable, Modal, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { format, isToday, isYesterday } from 'date-fns';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { useCategoriesStore } from '../../store/useCategoriesStore';
 import { useThemeColors } from '../../hooks/use-theme-colors';
@@ -23,6 +25,31 @@ export function TransactionAdderModal({ visible, onClose }: Props) {
 
   const addTransaction = useFinanceStore(s => s.addTransaction);
   const activeWalletId = useFinanceStore(s => s.activeWalletId);
+  const wallets = useFinanceStore(s => s.wallets);
+
+  // Date + wallet selection are now first-class — the rows used to be
+  // decorative placeholders that did nothing on tap (TestFlight finding).
+  const [date, setDate] = useState<Date>(new Date());
+  const [walletId, setWalletId] = useState<string | null>(activeWalletId);
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
+  const [walletPickerVisible, setWalletPickerVisible] = useState(false);
+
+  // When the modal opens, default the wallet selection to whichever
+  // is currently active in the store. Re-seeding on `visible` prevents
+  // the picker from sticking on a stale selection across modal opens.
+  useEffect(() => {
+    if (visible) {
+      setWalletId(activeWalletId);
+      setDate(new Date());
+    }
+  }, [visible, activeWalletId]);
+
+  const selectedWallet = wallets.find(w => w.id === walletId) ?? null;
+  const dateLabel = isToday(date)
+    ? 'Today'
+    : isYesterday(date)
+      ? 'Yesterday'
+      : format(date, 'MMM d, yyyy');
 
   // Vault Config is the source of truth for both pickers.
   const allCategories = useCategoriesStore(s => s.categories);
@@ -55,7 +82,7 @@ export function TransactionAdderModal({ visible, onClose }: Props) {
   const handleSave = () => {
     const num = parseFloat(amount);
     if (num <= 0) return;
-    if (!activeWalletId) return;  // modal shouldn't open without an active vault
+    if (!walletId) return;  // modal shouldn't open without any wallet
     // Resolve the picker IDs to their current display names just before
     // saving so any in-flight rename in Vault Config is captured.
     const categoryName =
@@ -65,11 +92,12 @@ export function TransactionAdderModal({ visible, onClose }: Props) {
       .filter((n): n is string => !!n);
 
     addTransaction({
-      walletId: activeWalletId,
+      walletId,
       type,
       amount: num,
       category: categoryName,
       merchant: 'Manual Entry',
+      date,
       labels: labelNames.length > 0 ? labelNames : undefined,
     });
     onClose();
@@ -226,22 +254,152 @@ export function TransactionAdderModal({ visible, onClose }: Props) {
             )}
           </View>
 
-          <Pressable className={rowClass}>
+          <Pressable
+            className={rowClass}
+            onPress={() => setDatePickerVisible(true)}>
             <View className="flex-row items-center gap-3">
               <Ionicons name="calendar-outline" size={20} color="#FF6B4A" />
-              <Text className="font-jakarta-bold text-text-high text-sm">Today</Text>
+              <Text className="font-jakarta-bold text-text-high text-sm">{dateLabel}</Text>
             </View>
             <Ionicons name="chevron-forward" size={16} color={themeColors.textLow} />
           </Pressable>
 
-          <Pressable className={rowClass}>
+          <Pressable
+            className={rowClass}
+            onPress={() => setWalletPickerVisible(true)}
+            disabled={wallets.length === 0}>
             <View className="flex-row items-center gap-3">
               <Ionicons name="wallet-outline" size={20} color="#FF6B4A" />
-              <Text className="font-jakarta-bold text-text-high text-sm">Personal Account</Text>
+              <Text className="font-jakarta-bold text-text-high text-sm">
+                {selectedWallet?.name ?? 'No wallet'}
+              </Text>
             </View>
             <Ionicons name="chevron-forward" size={16} color={themeColors.textLow} />
           </Pressable>
         </View>
+
+        {/* Inline iOS date picker, shown as a sheet under the
+            field tapped. iOS 14+ "compact" presentation feels
+            natural; Android falls back to the system date dialog. */}
+        {datePickerVisible && (
+          <Modal
+            transparent
+            animationType="fade"
+            onRequestClose={() => setDatePickerVisible(false)}>
+            <Pressable
+              style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }}
+              onPress={() => setDatePickerVisible(false)}>
+              <Pressable
+                style={{
+                  marginTop: 'auto',
+                  backgroundColor: themeColors.surface1,
+                  paddingTop: 16,
+                  paddingBottom: 32,
+                  paddingHorizontal: 24,
+                  borderTopLeftRadius: 32,
+                  borderTopRightRadius: 32,
+                  borderTopWidth: 1,
+                  borderTopColor: themeColors.hairline,
+                }}
+                onPress={(e) => e.stopPropagation()}>
+                <View className="flex-row justify-between items-center mb-4">
+                  <Text className="font-jakarta-bold text-text-high text-base">
+                    Transaction date
+                  </Text>
+                  <Pressable
+                    onPress={() => setDatePickerVisible(false)}
+                    className="px-4 py-2 rounded-full bg-accent-coral active:scale-95">
+                    <Text className="font-jakarta-bold text-white text-sm">Done</Text>
+                  </Pressable>
+                </View>
+                <DateTimePicker
+                  value={date}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                  maximumDate={new Date()}
+                  onChange={(_event, selected) => {
+                    if (Platform.OS !== 'ios') {
+                      // Android closes the dialog itself on pick/dismiss.
+                      setDatePickerVisible(false);
+                    }
+                    if (selected) setDate(selected);
+                  }}
+                  themeVariant="light"
+                />
+              </Pressable>
+            </Pressable>
+          </Modal>
+        )}
+
+        {/* Wallet picker — bottom sheet listing every wallet in the
+            active vault group. Tapping a row sets the selection and
+            closes the sheet. */}
+        <Modal
+          visible={walletPickerVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setWalletPickerVisible(false)}>
+          <Pressable
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }}
+            onPress={() => setWalletPickerVisible(false)}>
+            <Pressable
+              style={{
+                marginTop: 'auto',
+                backgroundColor: themeColors.surface1,
+                paddingTop: 16,
+                paddingBottom: 32,
+                paddingHorizontal: 24,
+                borderTopLeftRadius: 32,
+                borderTopRightRadius: 32,
+                borderTopWidth: 1,
+                borderTopColor: themeColors.hairline,
+              }}
+              onPress={(e) => e.stopPropagation()}>
+              <View className="flex-row justify-between items-center mb-4">
+                <Text className="font-jakarta-bold text-text-high text-base">
+                  Pick a wallet
+                </Text>
+                <Pressable
+                  onPress={() => setWalletPickerVisible(false)}
+                  className="w-9 h-9 rounded-full bg-surface-2 border border-hairline justify-center items-center">
+                  <Ionicons name="close" size={16} color={themeColors.textMid} />
+                </Pressable>
+              </View>
+              {wallets.map((w) => {
+                const isPicked = w.id === walletId;
+                return (
+                  <Pressable
+                    key={w.id}
+                    onPress={() => {
+                      setWalletId(w.id);
+                      setWalletPickerVisible(false);
+                    }}
+                    className="flex-row items-center gap-3 p-4 rounded-2xl mb-2 active:bg-surface-3"
+                    style={{
+                      backgroundColor: isPicked ? 'rgba(255, 107, 74, 0.12)' : 'transparent',
+                      borderWidth: 1,
+                      borderColor: isPicked ? 'rgba(255, 107, 74, 0.45)' : themeColors.hairline,
+                    }}>
+                    <View
+                      className="w-10 h-10 rounded-2xl justify-center items-center"
+                      style={{ backgroundColor: 'rgba(255, 107, 74, 0.16)' }}>
+                      <Ionicons name="wallet" size={16} color="#FF6B4A" />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="font-jakarta-bold text-text-high text-sm">{w.name}</Text>
+                      <Text className="font-jakarta text-text-low text-xs mt-0.5">
+                        {w.type} · {w.currency}
+                      </Text>
+                    </View>
+                    {isPicked && (
+                      <Ionicons name="checkmark-circle" size={20} color="#FF6B4A" />
+                    )}
+                  </Pressable>
+                );
+              })}
+            </Pressable>
+          </Pressable>
+        </Modal>
 
         {/* Custom Keypad Footer */}
         <View
