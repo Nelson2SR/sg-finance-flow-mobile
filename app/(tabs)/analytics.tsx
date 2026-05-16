@@ -187,26 +187,44 @@ export default function AnalyticsScreen() {
           ) : (
             <View className="gap-3">
               {activeBudgets.map(b => {
-                // Real spend against this budget: sum EXPENSE rows in
-                // the budget's wallet scope. We don't yet bucket by
-                // recurrence window (DAILY/MONTHLY/ONCE) — that lands
-                // when transactions carry a normalised period; for now
-                // we surface lifetime spend which is at least honest.
-                const inScope = b.wallets === 'ALL'
-                  ? transactions.filter(t => t.type === 'EXPENSE')
-                  : transactions.filter(
-                      t => t.type === 'EXPENSE' && b.wallets.includes(t.walletId),
-                    );
+                // Two new dimensions vs. the prior naive "sum every
+                // EXPENSE" calc:
+                //   1. Category scope — budget.categories[] (added
+                //      v1.0(3)). Empty list = legacy budget, falls
+                //      back to "all categories" so old rows don't go
+                //      silently zero.
+                //   2. Recurrence window — DAILY = today, MONTHLY =
+                //      this calendar month, ONCE = lifetime.
+                const now = new Date();
+                const periodStart =
+                  b.recurrence === 'DAILY'
+                    ? new Date(now.getFullYear(), now.getMonth(), now.getDate())
+                    : b.recurrence === 'MONTHLY'
+                      ? new Date(now.getFullYear(), now.getMonth(), 1)
+                      : new Date(0); // ONCE → all of history
+                const hasCategoryFilter = (b.categories?.length ?? 0) > 0;
+                const inScope = transactions.filter(t => {
+                  if (t.type !== 'EXPENSE') return false;
+                  if (t.date < periodStart) return false;
+                  if (b.wallets !== 'ALL' && !b.wallets.includes(t.walletId)) return false;
+                  if (hasCategoryFilter && !b.categories.includes(t.category)) return false;
+                  return true;
+                });
                 const realSpend = inScope.reduce((a, c) => a + c.amount, 0);
                 const p = Math.min(realSpend / b.amount, 1);
                 const overBudget = p > 0.8;
+                const periodLabel =
+                  b.recurrence === 'DAILY' ? 'Today'
+                    : b.recurrence === 'MONTHLY' ? 'This month'
+                      : 'All-time';
                 return (
                   <GradientCard key={b.id} padding="md" radius="row">
-                    <View className="flex-row justify-between mb-4">
-                      <View>
+                    <View className="flex-row justify-between mb-2">
+                      <View style={{ flex: 1 }}>
                         <Text className="font-jakarta-bold text-text-high text-base">{b.name}</Text>
                         <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mt-1">
-                          {b.recurrence}
+                          {periodLabel}
+                          {hasCategoryFilter ? ` · ${b.categories.length} ${b.categories.length === 1 ? 'category' : 'categories'}` : ''}
                         </Text>
                       </View>
                       <View className="items-end">
@@ -218,7 +236,17 @@ export default function AnalyticsScreen() {
                         </Text>
                       </View>
                     </View>
-                    <View className="h-2.5 bg-surface-3 rounded-full overflow-hidden">
+                    {/* Show the actual tracked category names below the
+                        name when the picker selected just a few — keeps
+                        the user honest about what counts. Trims to
+                        keep the row from wrapping into a fourth line. */}
+                    {hasCategoryFilter && (
+                      <Text className="font-jakarta text-text-low text-[11px] mb-3" numberOfLines={1}>
+                        {b.categories.slice(0, 4).join(' · ')}
+                        {b.categories.length > 4 ? ` · +${b.categories.length - 4} more` : ''}
+                      </Text>
+                    )}
+                    <View className="h-2.5 bg-surface-3 rounded-full overflow-hidden mt-1">
                       <View
                         className="h-full rounded-full"
                         style={{
@@ -232,6 +260,56 @@ export default function AnalyticsScreen() {
               })}
             </View>
           )}
+
+          {/* Untracked spend: surfaces this-month EXPENSE that NO
+              budget's category list covers. Answers the user's
+              "where is the rest of my spending going?" question
+              and makes the gap obvious so they're nudged to add a
+              budget for it. Only renders when there's actually
+              untracked spend to report. */}
+          {(() => {
+            const monthStart = new Date();
+            monthStart.setDate(1);
+            monthStart.setHours(0, 0, 0, 0);
+            const trackedCategories = new Set<string>(
+              activeBudgets.flatMap((b) => b.categories ?? []),
+            );
+            const untracked = transactions
+              .filter(
+                (t) =>
+                  t.type === 'EXPENSE' &&
+                  t.date >= monthStart &&
+                  !trackedCategories.has(t.category),
+              )
+              .reduce((a, c) => a + c.amount, 0);
+            if (untracked <= 0 || activeBudgets.length === 0) return null;
+            return (
+              <View className="mt-3">
+                <GradientCard padding="md" radius="row">
+                  <View className="flex-row justify-between items-center">
+                    <View className="flex-row items-center gap-3">
+                      <View
+                        className="w-9 h-9 rounded-2xl justify-center items-center"
+                        style={{ backgroundColor: 'rgba(255, 181, 71, 0.16)' }}>
+                        <Ionicons name="alert-circle-outline" size={18} color="#FFB547" />
+                      </View>
+                      <View>
+                        <Text className="font-jakarta-bold text-text-high text-sm">
+                          Untracked this month
+                        </Text>
+                        <Text className="font-jakarta text-text-low text-[11px] mt-0.5">
+                          No budget covers these categories yet.
+                        </Text>
+                      </View>
+                    </View>
+                    <Text className="font-jakarta-bold text-accent-amber text-base">
+                      ${untracked.toFixed(0)}
+                    </Text>
+                  </View>
+                </GradientCard>
+              </View>
+            );
+          })()}
         </View>
 
         {/* Subscription Drains: not yet implemented end-to-end. Hidden

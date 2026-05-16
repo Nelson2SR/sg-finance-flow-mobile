@@ -86,7 +86,7 @@ describe('AnalyticsScreen', () => {
       activeWalletId: 'w1',
       budgets: [{
         id: 'b1', name: 'Monthly', amount: 4000, wallets: 'ALL',
-        currency: 'SGD', recurrence: 'MONTHLY',
+        currency: 'SGD', recurrence: 'MONTHLY', categories: [],
       }],
       transactions: [],
     });
@@ -101,7 +101,7 @@ describe('AnalyticsScreen', () => {
       activeWalletId: 'w1',
       budgets: [{
         id: 'b1', name: 'Monthly', amount: 4000, wallets: 'ALL',
-        currency: 'SGD', recurrence: 'MONTHLY',
+        currency: 'SGD', recurrence: 'MONTHLY', categories: [],
       }],
       transactions: [
         { id: 't1', walletId: 'w1', type: 'EXPENSE', amount: 9999, category: 'Test', merchant: 'X', date: new Date() },

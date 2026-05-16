@@ -23,6 +23,15 @@ export interface Budget {
   currency: string;
   recurrence: 'DAILY' | 'MONTHLY' | 'ONCE';
   wallets: string[] | 'ALL';
+  /**
+   * Categories this budget tracks. When non-empty, the spend
+   * calculation sums EXPENSE transactions whose `category` is in
+   * this list (within the recurrence window + wallet scope). When
+   * empty (legacy budgets created before the v1.0(3) rebuild) we
+   * fall back to counting every EXPENSE — preserves the prior
+   * behaviour without breaking those rows.
+   */
+  categories: string[];
 }
 
 export interface Transaction {

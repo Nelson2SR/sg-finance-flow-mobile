@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, Pressable, TextInput, Modal, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFinanceStore } from '../../store/useFinanceStore';
+import { useCategoriesStore } from '../../store/useCategoriesStore';
 import { useThemeColors } from '../../hooks/use-theme-colors';
 
 interface Props {
@@ -15,30 +16,45 @@ export const CreateBudgetModal = ({ visible, onClose }: Props) => {
   const themeColors = useThemeColors();
   const addBudget = useFinanceStore(s => s.addBudget);
   const wallets = useFinanceStore(s => s.wallets);
+  const allCategories = useCategoriesStore(s => s.categories);
+  // Budgets only make sense against EXPENSE categories — you don't
+  // "budget" income. Picker excludes income categories.
+  const expenseCategories = allCategories.filter(c => c.kind === 'expense');
 
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
   const [recurrence, setRecurrence] = useState<Recurrence>('MONTHLY');
   const [walletMapping, setWalletMapping] = useState<string>('ALL');
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [nameFocused, setNameFocused] = useState(false);
 
+  const toggleCategory = (catName: string) =>
+    setSelectedCategories((prev) =>
+      prev.includes(catName) ? prev.filter((n) => n !== catName) : [...prev, catName],
+    );
+
   const handleSave = () => {
-    if (!name.trim() || !amount) return;
+    if (!name.trim() || !amount || selectedCategories.length === 0) return;
     addBudget({
       name,
       amount: parseFloat(amount),
       currency: 'SGD',
       wallets: walletMapping === 'ALL' ? 'ALL' : [walletMapping],
       recurrence,
+      categories: selectedCategories,
     });
     setName('');
     setAmount('');
     setRecurrence('MONTHLY');
     setWalletMapping('ALL');
+    setSelectedCategories([]);
     onClose();
   };
 
-  const isValid = name.trim().length > 0 && amount.length > 0;
+  // Require at least one tracked category — otherwise the spend
+  // calc is meaningless and the user wouldn't see honest numbers.
+  const isValid =
+    name.trim().length > 0 && amount.length > 0 && selectedCategories.length > 0;
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
@@ -80,7 +96,7 @@ export const CreateBudgetModal = ({ visible, onClose }: Props) => {
             </View>
 
             <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-2">
-              Category Binding
+              Budget Name
             </Text>
             <TextInput
               className={`bg-surface-2 px-4 py-4 rounded-2xl text-text-high text-base font-jakarta-bold mb-6 border ${nameFocused ? 'border-accent-coral' : 'border-hairline'}`}
@@ -91,6 +107,55 @@ export const CreateBudgetModal = ({ visible, onClose }: Props) => {
               onFocus={() => setNameFocused(true)}
               onBlur={() => setNameFocused(false)}
             />
+
+            <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-2">
+              Tracks Categories{' '}
+              {selectedCategories.length > 0 ? (
+                <Text className="text-accent-coral">· {selectedCategories.length} selected</Text>
+              ) : null}
+            </Text>
+            {expenseCategories.length === 0 ? (
+              <View className="bg-surface-2 px-4 py-4 rounded-2xl border border-hairline mb-6">
+                <Text className="font-jakarta text-text-mid text-xs leading-relaxed">
+                  No expense categories yet. Add some in Settings → Vault Config first, then
+                  come back to set up budgets.
+                </Text>
+              </View>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 8, paddingRight: 16 }}
+                className="mb-6">
+                {expenseCategories.map((cat) => {
+                  const selected = selectedCategories.includes(cat.name);
+                  return (
+                    <Pressable
+                      key={cat.id}
+                      onPress={() => toggleCategory(cat.name)}
+                      className="px-3 py-2.5 rounded-2xl flex-row items-center gap-2"
+                      style={{
+                        backgroundColor: selected ? cat.color : themeColors.surface2,
+                        borderWidth: 1,
+                        borderColor: selected ? cat.color : themeColors.hairline,
+                        boxShadow: selected ? `0 0 14px ${cat.color}55` : undefined,
+                      }}>
+                      <Ionicons
+                        name={selected ? 'checkmark' : cat.icon}
+                        size={14}
+                        color={selected ? '#fff' : cat.color}
+                      />
+                      <Text
+                        className={`font-jakarta-bold text-xs ${
+                          selected ? 'text-white' : 'text-text-mid'
+                        }`}>
+                        {cat.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
 
             <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-2">
               Cycle Horizon
