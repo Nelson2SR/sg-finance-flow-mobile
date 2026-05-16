@@ -1,27 +1,27 @@
 {
   "expo": {
-    "name": "SG Finance Flow",
-    "slug": "sg-finance-flow-mobile",
+    "name": "AI Finance Tracker",
+    "slug": "ai-finance-tracker",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "sgfinanceflow",
+    "scheme": "aifinancetracker",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.sgfinanceflow.mobile",
+      "bundleIdentifier": "com.aifinancetracker.app",
       "buildNumber": "1",
       "infoPlist": {
-        "NSCameraUsageDescription": "SG Finance Flow uses the camera so you can snap receipts and import statements with Magic Scan.",
-        "NSPhotoLibraryUsageDescription": "SG Finance Flow needs photo library access to import receipt images you've already saved.",
+        "NSCameraUsageDescription": "AI Finance Tracker uses the camera so you can snap receipts and import statements with Magic Scan.",
+        "NSPhotoLibraryUsageDescription": "AI Finance Tracker needs photo library access to import receipt images you've already saved.",
         "NSFaceIDUsageDescription": "Face ID unlocks your private finance data on this device.",
         "ITSAppUsesNonExemptEncryption": false
       },
       "associatedDomains": []
     },
     "android": {
-      "package": "com.sgfinanceflow.mobile",
+      "package": "com.aifinancetracker.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
