@@ -170,11 +170,20 @@ export default function HomeScreen() {
   };
 
   const handleSelectFile = async (uri: string, mimeType: string) => {
+    // Two-Modal handoff: closing the picker (MagicScanWindow) and
+    // opening the review modal in the same render batch makes iOS
+    // queue the review modal behind the dismissing picker — so the
+    // spinner never appears for the receipt path (the PDF picker
+    // dismisses fast enough that the queue clears in time; image
+    // picker with allowsEditing runs a crop step and the dismiss
+    // animation is longer). Close the picker, wait one animation
+    // frame, then open the review modal so the spinner is visible.
     setScanWindowVisible(false);
+    setScanError(null);
+    await new Promise<void>((resolve) => setTimeout(resolve, 320));
     setScanModalVisible(true);
     setIsScanning(true);
 
-    setScanError(null);
     try {
       let data: ScanResponse | null;
       if (mimeType === 'application/pdf' && user?.id) {
