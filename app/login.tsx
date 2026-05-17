@@ -228,22 +228,32 @@ export default function LoginScreen() {
     <Surface halo>
       <SafeAreaView className={innerContainerClass}>
         <View className="items-center mb-10">
-          {/* App icon — same image used as the iOS app icon. The
-              borderRadius matches Apple's squircle proportion
-              (~22.37% of side length, so 18px on an 80px frame) so
-              the rendered logo here previews the same shape the
-              system uses on the home screen. overflow:hidden clips
-              the PNG's white corners (the icon ships flattened for
-              App Store Connect compliance). */}
+          {/* App icon — same image used as the iOS app icon, rendered
+              so it visually matches what the user sees on the iOS
+              home screen.
+              The icon PNG is flattened opaque for App Store Connect:
+              the squircle is centred in a 1024×1024 frame with white
+              triangles in the 4 corners outside the curve. iOS masks
+              those off natively with its continuous-superellipse
+              squircle, but RN's `borderRadius` is a standard rounded
+              corner that doesn't perfectly cover them — leaving a
+              faint white sliver at each corner. We compensate by
+              scaling the image 10% past the container so the
+              squircle's edge sits OUTSIDE the visible area and the
+              white corners are clipped by overflow:hidden. */}
           <View
-            className="w-20 h-20 mb-6 overflow-hidden"
+            className="w-20 h-20 mb-6 overflow-hidden items-center justify-center"
             style={{
               borderRadius: 18,
               boxShadow: '0 0 32px rgba(255, 107, 74, 0.55)',
             }}>
             <Image
               source={require('../assets/images/icon.png')}
-              style={{ width: 80, height: 80 }}
+              style={{
+                width: 80,
+                height: 80,
+                transform: [{ scale: 1.1 }],
+              }}
               resizeMode="cover"
             />
           </View>
