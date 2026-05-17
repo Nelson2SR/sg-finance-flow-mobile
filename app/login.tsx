@@ -19,6 +19,7 @@ import {
 } from '../constants/Config';
 import { useAuth } from '../context/AuthContext';
 import { useThemeColors } from '../hooks/use-theme-colors';
+import { updateProfileExtras } from '../lib/profileExtras';
 import {
   loginWithWeChat,
   requestPhoneOtp,
@@ -141,6 +142,9 @@ export default function LoginScreen() {
     try {
       const resp = await signupPhoneOtp(signupToken);
       await login(resp);
+      // Same local-stash as the existing-user branch — the phone is
+      // the OTP input we just verified.
+      await updateProfileExtras(resp.user.id, { phone }).catch(() => {});
       router.replace('/new-profile');
     } catch (err: any) {
       Alert.alert(
@@ -168,6 +172,10 @@ export default function LoginScreen() {
           token_type: resp.token_type,
           user: resp.user,
         });
+        // Stash the phone locally so the Profile screen can show it.
+        // Backend doesn't expose it on the user object today, but the
+        // user typed it 30s ago — capture it while we still have it.
+        await updateProfileExtras(resp.user.id, { phone }).catch(() => {});
         router.replace('/(tabs)');
         return;
       }

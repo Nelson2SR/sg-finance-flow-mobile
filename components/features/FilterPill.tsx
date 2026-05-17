@@ -37,6 +37,20 @@ interface Props<T extends string | number | null> {
   /** Optional renderer for an extra row (e.g. month picker) shown
    *  above the options list. */
   extraContent?: React.ReactNode;
+  /**
+   * When true, the trigger stretches to fill the parent's width with
+   * the active selection centred and the chevron pinned right. Used
+   * on Insights where the two pills share a row 50/50; the default
+   * shape is still the compact left-aligned pill used by Activity.
+   */
+  fullWidth?: boolean;
+  /**
+   * When true, the small-caps eyebrow above the pill is omitted to
+   * save vertical space. The trigger's display string already names
+   * the active selection so this is safe when the meaning is
+   * self-evident in context.
+   */
+  hideLabel?: boolean;
 }
 
 export function FilterPill<T extends string | number | null>({
@@ -47,18 +61,24 @@ export function FilterPill<T extends string | number | null>({
   value,
   onChange,
   extraContent,
+  fullWidth = false,
+  hideLabel = false,
 }: Props<T>) {
   const themeColors = useThemeColors();
   const [open, setOpen] = React.useState(false);
 
   return (
-    <View style={{ flexShrink: 0 }}>
-      <Text className="font-jakarta-bold text-text-low text-[9px] uppercase tracking-widest mb-1 px-1">
-        {label}
-      </Text>
+    <View style={fullWidth ? { flex: 1 } : { flexShrink: 0 }}>
+      {!hideLabel && (
+        <Text className="font-jakarta-bold text-text-low text-[9px] uppercase tracking-widest mb-1 px-1">
+          {label}
+        </Text>
+      )}
       <Pressable
         onPress={() => setOpen(true)}
-        className="flex-row items-center gap-1.5 px-3 py-2 rounded-full border"
+        className={`flex-row items-center gap-1.5 px-3 py-2 rounded-full border ${
+          fullWidth ? 'justify-between' : ''
+        }`}
         style={{
           backgroundColor: active ? 'rgba(255, 107, 74, 0.15)' : themeColors.surface2,
           borderColor: active ? 'rgba(255, 107, 74, 0.6)' : themeColors.hairline,
@@ -66,7 +86,7 @@ export function FilterPill<T extends string | number | null>({
         <Text
           className={`font-jakarta-bold text-xs ${
             active ? 'text-accent-coral' : 'text-text-mid'
-          }`}
+          } ${fullWidth ? 'flex-1 text-center pl-3' : ''}`}
           numberOfLines={1}>
           {display}
         </Text>

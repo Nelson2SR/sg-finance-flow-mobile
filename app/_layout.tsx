@@ -173,6 +173,7 @@ function RootLayoutNav() {
         <Stack.Screen name="categories" options={{ headerShown: false }} />
         <Stack.Screen name="labels" options={{ headerShown: false }} />
         <Stack.Screen name="privacy" options={{ headerShown: false }} />
+        <Stack.Screen name="profile" options={{ headerShown: false }} />
         <Stack.Screen name="groups" options={{ headerShown: false }} />
       </Stack>
       <AuthGuard />

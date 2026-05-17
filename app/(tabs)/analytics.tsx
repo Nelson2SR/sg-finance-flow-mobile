@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, ScrollView, Pressable, Platform } from 'react-native';
+import type { MonthYearValue } from '../../components/features/MonthYearPicker';
 import Svg, { Circle } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -11,9 +12,9 @@ import {
 import { useCategoriesStore } from '../../store/useCategoriesStore';
 import { CreateBudgetModal } from '../../components/features/CreateBudgetModal';
 import { EditBudgetModal } from '../../components/features/EditBudgetModal';
-import { HeroMonthPicker } from '../../components/features/HeroMonthPicker';
 import { CategoryDonut } from '../../components/features/CategoryDonut';
-import { monthYearDisplay } from '../../components/features/MonthYearPicker';
+import { FilterPill } from '../../components/features/FilterPill';
+import { MonthYearPicker, monthYearDisplay } from '../../components/features/MonthYearPicker';
 import { Surface, SurfaceHeaderArea, GradientCard, ScreenHeader, NeonButton } from '../../components/ui';
 import { useThemeColors } from '../../hooks/use-theme-colors';
 
@@ -92,7 +93,7 @@ const InsightTabs = ({ active, onChange }: InsightTabsProps) => {
   const themeColors = useThemeColors();
   return (
     <View
-      className="flex-row p-1.5 rounded-full mb-6 border"
+      className="flex-row p-1 rounded-full mb-4 border"
       style={{
         backgroundColor: themeColors.surface2,
         borderColor: themeColors.hairline,
@@ -103,7 +104,7 @@ const InsightTabs = ({ active, onChange }: InsightTabsProps) => {
           <Pressable
             key={opt.id}
             onPress={() => onChange(opt.id)}
-            className="flex-1 flex-row items-center justify-center gap-1.5 py-2.5 rounded-full"
+            className="flex-1 flex-row items-center justify-center gap-1.5 py-2 rounded-full"
             style={{
               backgroundColor: isActive ? '#FF6B4A' : 'transparent',
               boxShadow: isActive ? '0 4px 14px rgba(255, 107, 74, 0.45)' : undefined,
@@ -129,7 +130,7 @@ const InsightTabs = ({ active, onChange }: InsightTabsProps) => {
 export default function AnalyticsScreen() {
   const themeColors = useThemeColors();
   const transactions = useFinanceStore(s => s.transactions);
-  const activeWalletId = useFinanceStore(s => s.activeWalletId);
+  const wallets = useFinanceStore(s => s.wallets);
   const budgets = useFinanceStore(s => s.budgets);
   const categoriesByKind = useCategoriesStore(s => s.categories);
   const [budgetModalVisible, setBudgetModalVisible] = useState(false);
@@ -138,12 +139,49 @@ export default function AnalyticsScreen() {
   // Insights is intentionally month-focused, so we never expose an
   // "all time" option here.
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthCode());
-  const [activeTab, setActiveTab] = useState<InsightTab>('budget');
+  // Wallet the whole tab is scoped to. `null` means "all wallets" —
+  // the aggregate view, which is the default for Insights so the
+  // user gets a portfolio-wide picture before narrowing. Budget,
+  // Category and Recurring all honour this filter.
+  const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<InsightTab>('category');
   const monthRange = useMemo(() => monthCodeRange(selectedMonth), [selectedMonth]);
   const isCurrentMonth = selectedMonth === currentMonthCode();
 
-  const activeBudgets = budgets.filter(
-    b => b.wallets === 'ALL' || (activeWalletId !== null && b.wallets.includes(activeWalletId)),
+  // Build the wallet picker options. Top sentinel row clears the
+  // filter; bank/type/currency captions echo the Activity tab's
+  // dropdown so the two screens read consistently.
+  const walletOptions = useMemo(
+    () => [
+      { value: null, label: 'All wallets' },
+      ...wallets.map((w) => ({
+        value: w.id,
+        label: w.name,
+        caption: `${w.type} · ${w.currency}`,
+      })),
+    ],
+    [wallets],
+  );
+  const walletPillDisplay =
+    selectedWalletId === null
+      ? 'All wallets'
+      : wallets.find((w) => w.id === selectedWalletId)?.name ?? 'Wallet';
+  const walletScopeLabel =
+    selectedWalletId === null
+      ? null
+      : wallets.find((w) => w.id === selectedWalletId)?.name ?? null;
+
+  // Budgets in scope. "All wallets" shows every budget; otherwise we
+  // keep ones that explicitly include the selected wallet (or have
+  // ALL scope).
+  const activeBudgets = useMemo(
+    () =>
+      selectedWalletId === null
+        ? budgets
+        : budgets.filter(
+            (b) => b.wallets === 'ALL' || b.wallets.includes(selectedWalletId),
+          ),
+    [budgets, selectedWalletId],
   );
   // No magic fallback: when the user has no budgets, the aura collapses
   // to the empty track and we render a CTA instead of pretending there's
@@ -153,13 +191,27 @@ export default function AnalyticsScreen() {
     0,
   );
 
-  // Spend / income scoped to the selected month.
+  // Transactions scoped to the selected month + selected wallet.
+  // Used by every tab's downstream calculations (category donuts,
+  // safe-to-spend ratio, untracked-spend callout).
   const monthTxs = useMemo(
-    () => transactions.filter((t) => t.date >= monthRange.start && t.date < monthRange.end),
-    [transactions, monthRange.start, monthRange.end],
+    () =>
+      transactions.filter((t) => {
+        if (t.date < monthRange.start || t.date >= monthRange.end) return false;
+        if (selectedWalletId !== null && t.walletId !== selectedWalletId) return false;
+        return true;
+      }),
+    [transactions, monthRange.start, monthRange.end, selectedWalletId],
+  );
+  const walletScopedTxs = useMemo(
+    () =>
+      selectedWalletId === null
+        ? transactions
+        : transactions.filter((t) => t.walletId === selectedWalletId),
+    [transactions, selectedWalletId],
   );
   const currentSpendRaw = monthTxs
-    .filter(t => t.type === 'EXPENSE' && (activeBudgets.length > 0 ? true : t.walletId === activeWalletId))
+    .filter((t) => t.type === 'EXPENSE')
     .reduce((acc, curr) => acc + curr.amount, 0);
 
   const headerAction =
@@ -187,10 +239,48 @@ export default function AnalyticsScreen() {
         contentContainerStyle={{
           paddingHorizontal: 24,
           paddingBottom: Platform.OS === 'ios' ? 120 : 100,
-          paddingTop: 12,
+          paddingTop: 4,
         }}
         showsVerticalScrollIndicator={false}>
-        <HeroMonthPicker value={selectedMonth} onChange={setSelectedMonth} />
+        {/* Filter row — Date + Wallet split 50/50 across the full
+            screen width. Eyebrow labels are hidden to keep the row
+            short so the first Category card lands above the fold.
+            Insights is month-focused, so the Date pill ignores
+            the "All time" sentinel. */}
+        <View className="flex-row gap-3 mb-3">
+          <FilterPill
+            label="Date"
+            fullWidth
+            hideLabel
+            display={monthYearDisplay(selectedMonth)}
+            active={!isCurrentMonth}
+            options={[]}
+            value={selectedMonth as MonthYearValue}
+            onChange={(next) => {
+              if (next === 'ALL') return;
+              setSelectedMonth(next as string);
+            }}
+            extraContent={
+              <MonthYearPicker
+                value={selectedMonth}
+                onChange={(next) => {
+                  if (next === 'ALL') return;
+                  setSelectedMonth(next);
+                }}
+              />
+            }
+          />
+          <FilterPill
+            label="Wallet"
+            fullWidth
+            hideLabel
+            display={walletPillDisplay}
+            active={selectedWalletId !== null}
+            options={walletOptions}
+            value={selectedWalletId}
+            onChange={setSelectedWalletId}
+          />
+        </View>
 
         <InsightTabs active={activeTab} onChange={setActiveTab} />
 
@@ -252,6 +342,11 @@ export default function AnalyticsScreen() {
                         if (t.type !== 'EXPENSE') return false;
                         if (t.date < scopeStart || t.date >= monthRange.end) return false;
                         if (b.wallets !== 'ALL' && !b.wallets.includes(t.walletId)) return false;
+                        // Narrow further to the wallet picker's selection
+                        // when one is active — a budget that covers
+                        // multiple wallets should still respect the
+                        // top-of-page filter.
+                        if (selectedWalletId !== null && t.walletId !== selectedWalletId) return false;
                         if (hasCategoryFilter && !b.categories.includes(t.category)) return false;
                         return true;
                       });
@@ -352,13 +447,13 @@ export default function AnalyticsScreen() {
         {activeTab === 'category' && (
           <>
             <CategoryDonut
-              transactions={transactions}
+              transactions={walletScopedTxs}
               categories={categoriesByKind}
               txType="EXPENSE"
               monthCode={selectedMonth}
             />
             <CategoryDonut
-              transactions={transactions}
+              transactions={walletScopedTxs}
               categories={categoriesByKind}
               txType="INCOME"
               monthCode={selectedMonth}
@@ -380,7 +475,9 @@ export default function AnalyticsScreen() {
                   Coming soon
                 </Text>
                 <Text className="font-jakarta text-text-mid text-xs text-center leading-relaxed px-4">
-                  Recurring charges for {monthYearDisplay(selectedMonth)} will surface here once we detect them in your imported activity.
+                  Recurring charges for {monthYearDisplay(selectedMonth)}
+                  {walletScopeLabel ? ` on ${walletScopeLabel}` : ' across all wallets'}
+                  {' '}will surface here once we detect them in your imported activity.
                 </Text>
               </View>
             </GradientCard>

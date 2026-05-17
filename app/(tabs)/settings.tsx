@@ -1,16 +1,15 @@
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, View, Text, Switch, ScrollView, TextInput, Platform, Pressable } from 'react-native';
+import React, { useState } from 'react';
+import { Alert, View, Text, Switch, ScrollView, Image, Platform, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Surface, SurfaceHeaderArea, GradientCard, ScreenHeader } from '../../components/ui';
 import { useThemeColors } from '../../hooks/use-theme-colors';
 import { useCopilotStore, CopilotPersona } from '../../store/useCopilotStore';
 import { useCategoriesStore } from '../../store/useCategoriesStore';
 import { useAuth } from '../../context/AuthContext';
-import { updateProfile } from '../../services/authService';
 import { useBiometricStore } from '../../lib/biometricLock';
-import { useVaultGroupsStore } from '../../store/useVaultGroupsStore';
+import { getProfileExtras } from '../../lib/profileExtras';
 
 const PERSONA_OPTIONS: {
   id: CopilotPersona;
@@ -43,55 +42,35 @@ export default function SettingsScreen() {
   const togglePersona = useCopilotStore(s => s.togglePersona);
   const categoriesCount = useCategoriesStore(s => s.categories.length);
   const labelsCount = useCategoriesStore(s => s.labels.length);
-  const { user, accessToken, logout, updateUser } = useAuth();
+  const { user, logout } = useAuth();
   const biometricEnabled = useBiometricStore(s => s.enabled);
   const setBiometricEnabled = useBiometricStore(s => s.setEnabled);
 
-  // Display name: keep a local draft so editing feels instant; sync to
-  // /me/profile on blur. Re-seed when `user.display_name` changes (e.g.,
-  // after onboarding completes or a refresh from elsewhere).
-  const fallbackName = user?.display_name ?? '';
-  const [nameDraft, setNameDraft] = useState(fallbackName);
-  const [savingName, setSavingName] = useState(false);
-  useEffect(() => {
-    setNameDraft(user?.display_name ?? '');
-  }, [user?.display_name]);
+  // Local avatar URI mirrors the per-device picked avatar from the
+  // Profile screen. Refresh on every focus so coming back from
+  // /profile shows the new picture without remounting Settings.
+  const [localAvatarUri, setLocalAvatarUri] = useState<string | null>(null);
+  useFocusEffect(
+    React.useCallback(() => {
+      let cancelled = false;
+      if (user?.id) {
+        void getProfileExtras(user.id).then((extras) => {
+          if (!cancelled) setLocalAvatarUri(extras.avatarUri ?? null);
+        });
+      }
+      return () => {
+        cancelled = true;
+      };
+    }, [user?.id]),
+  );
 
   const displayInitials = (user?.display_name || '?').substring(0, 2).toUpperCase();
   const headerName = user?.display_name?.trim() || `User #${user?.id ?? '?'}`;
-
-  const commitName = async () => {
-    const trimmed = nameDraft.trim();
-    if (!accessToken) return;
-    if (trimmed === (user?.display_name ?? '').trim()) return;
-    if (trimmed.length < 1 || trimmed.length > 64) {
-      Alert.alert('Invalid name', 'Display name must be 1–64 characters.');
-      setNameDraft(user?.display_name ?? '');
-      return;
-    }
-    setSavingName(true);
-    try {
-      const updated = await updateProfile(accessToken, { display_name: trimmed });
-      updateUser({
-        id: updated.id,
-        display_name: updated.display_name,
-        avatar_url: updated.avatar_url,
-        email: updated.email,
-      });
-      // Backend may have renamed the default "My Vault" — keep the
-      // local store in sync so the home tab updates without a reload.
-      await useVaultGroupsStore.getState().syncFromBackend().catch(() => {});
-    } catch (err: any) {
-      const detail = err?.response?.data?.detail;
-      Alert.alert(
-        'Could not save name',
-        typeof detail === 'string' ? detail : 'Please try again.',
-      );
-      setNameDraft(user?.display_name ?? '');
-    } finally {
-      setSavingName(false);
-    }
-  };
+  const avatarSource = localAvatarUri
+    ? { uri: localAvatarUri }
+    : user?.avatar_url
+      ? { uri: user.avatar_url }
+      : null;
 
   // Row used inside the profile + preferences cards. Keeps spacing and
   // border-bottom consistent across both.
@@ -138,60 +117,38 @@ export default function SettingsScreen() {
           paddingHorizontal: 24,
         }}
         showsVerticalScrollIndicator={false}>
-        <GradientCard padding="lg" accent="coral" className="mb-6">
-          <View className="flex-row items-center gap-5">
-            <View
-              className="w-20 h-20 rounded-full bg-accent-coral justify-center items-center"
-              style={{ boxShadow: '0 0 24px rgba(255, 107, 74, 0.5)' }}>
-              <Text className="font-jakarta-bold text-white text-2xl tracking-widest uppercase">
-                {displayInitials}
-              </Text>
-            </View>
-            <View className="flex-1">
-              <Text className="font-jakarta-bold text-text-high text-2xl mb-1">
-                {headerName}
-              </Text>
-              <Text className="font-jakarta text-text-low text-xs">
-                Account #{user?.id ?? '?'}
-              </Text>
-            </View>
-          </View>
-        </GradientCard>
-
-        <GradientCard padding="none" className="mb-8 overflow-hidden">
-          <Row
-            label="Display Name"
-            right={
-              <View className="flex-row items-center gap-2">
-                {savingName && (
-                  <ActivityIndicator size="small" color="#FF6B4A" />
+        {/* Hero card now doubles as the entry point to the Profile
+            subpage — tapping it pushes /profile where the user can
+            edit display name, avatar, phone, birthday and gender. */}
+        <Pressable onPress={() => router.push('/profile')}>
+          <GradientCard padding="lg" accent="coral" className="mb-8">
+            <View className="flex-row items-center gap-5">
+              <View
+                className="w-20 h-20 rounded-full bg-accent-coral justify-center items-center overflow-hidden"
+                style={{ boxShadow: '0 0 24px rgba(255, 107, 74, 0.5)' }}>
+                {avatarSource ? (
+                  <Image source={avatarSource} style={{ width: 80, height: 80 }} />
+                ) : (
+                  <Text className="font-jakarta-bold text-white text-2xl tracking-widest uppercase">
+                    {displayInitials}
+                  </Text>
                 )}
-                <TextInput
-                  className="text-text-high font-jakarta-bold text-sm text-right min-w-[140px]"
-                  style={{
-                    // Explicit height + vertical padding so the iOS
-                    // TextInput renders descenders fully — without this
-                    // "g" / "p" / "y" got clipped flush with the row
-                    // baseline in production.
-                    minHeight: 32,
-                    paddingVertical: 6,
-                    includeFontPadding: false as any,
-                  }}
-                  value={nameDraft}
-                  onChangeText={setNameDraft}
-                  onBlur={commitName}
-                  onSubmitEditing={commitName}
-                  maxLength={64}
-                  returnKeyType="done"
-                  editable={!savingName}
-                  placeholder="Add a name"
-                  placeholderTextColor={themeColors.textDim}
-                />
               </View>
-            }
-            last
-          />
-        </GradientCard>
+              <View className="flex-1">
+                <Text className="font-jakarta-bold text-text-high text-2xl mb-1">
+                  {headerName}
+                </Text>
+                <Text className="font-jakarta text-text-low text-xs">
+                  Account #{user?.id ?? '?'}
+                </Text>
+                <Text className="font-jakarta-bold text-accent-coral text-[10px] uppercase tracking-widest mt-2">
+                  Edit profile
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={themeColors.textLow} />
+            </View>
+          </GradientCard>
+        </Pressable>
 
         <Text className="font-jakarta-bold text-text-high text-xl mb-5">Preferences</Text>
         <GradientCard padding="none" className="mb-8 overflow-hidden">

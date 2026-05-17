@@ -14,7 +14,9 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
+
+import { getProfileExtras } from '../../lib/profileExtras';
 
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { TransactionAdderModal } from '../../components/features/TransactionAdderModal';
@@ -108,6 +110,36 @@ export default function HomeScreen() {
   const activeGroupId = useVaultGroupsStore(s => s.activeGroupId);
   const activeVaultGroup =
     vaultGroups.find(g => g.id === activeGroupId) ?? vaultGroups[0] ?? null;
+
+  // Backend has no avatar upload endpoint yet — the Profile screen
+  // saves the picked image as a file:// URI in SecureStore, so the
+  // server-side `member.avatar_url` for the current user stays null
+  // and the AvatarStack falls back to "NS" initials. Patch the local
+  // URI onto the matching member entry so the wallet card mirrors
+  // what Settings shows.
+  const [localAvatarUri, setLocalAvatarUri] = React.useState<string | null>(null);
+  useFocusEffect(
+    React.useCallback(() => {
+      let cancelled = false;
+      if (user?.id) {
+        void getProfileExtras(user.id).then((extras) => {
+          if (!cancelled) setLocalAvatarUri(extras.avatarUri ?? null);
+        });
+      } else {
+        setLocalAvatarUri(null);
+      }
+      return () => {
+        cancelled = true;
+      };
+    }, [user?.id]),
+  );
+  const membersWithLocalAvatar = React.useMemo(() => {
+    const members = activeVaultGroup?.members ?? [];
+    if (!localAvatarUri || !user?.id) return members;
+    return members.map((m) =>
+      m.user_id === user.id ? { ...m, avatar_url: localAvatarUri } : m,
+    );
+  }, [activeVaultGroup?.members, localAvatarUri, user?.id]);
 
   React.useEffect(() => {
     // Skip the backend sync while the dev auth bypass is on — the seeded
@@ -300,10 +332,13 @@ export default function HomeScreen() {
                 {/* Vault Group member avatars — replaces the legacy
                     P1/P2 placeholder dots. Falls back to a single dot
                     when the active group has one member (solo vault),
-                    or shows nothing if the user is in zero groups. */}
-                {activeVaultGroup && activeVaultGroup.members.length > 0 && (
+                    or shows nothing if the user is in zero groups.
+                    The current user's avatar is patched in from local
+                    storage above so picked photos show without a
+                    backend upload round-trip. */}
+                {activeVaultGroup && membersWithLocalAvatar.length > 0 && (
                   <AvatarStack
-                    members={activeVaultGroup.members}
+                    members={membersWithLocalAvatar}
                     size={32}
                     maxVisible={4}
                   />
