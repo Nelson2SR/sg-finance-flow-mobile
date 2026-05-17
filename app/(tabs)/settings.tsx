@@ -150,42 +150,34 @@ export default function SettingsScreen() {
           </GradientCard>
         </Pressable>
 
-        <Text className="font-jakarta-bold text-text-high text-xl mb-5">Preferences</Text>
+        {/* ── Vault Groups ────────────────────────────────────────────
+            Manage shared groups: who's in your active vault, invite
+            new members via a universal link, switch between multiple
+            groups, leave. See PRD 10 + ARCH_VAULT_GROUPS.
+            Surfaced directly under the user hero because Vault Groups
+            is the social-identity layer — the user wants to see "who
+            am I sharing with?" before tweaking categories or theme. */}
+        <Text className="font-jakarta-bold text-text-high text-xl mb-1">Vault Groups</Text>
+        <Text className="font-jakarta text-text-low text-xs mb-5 leading-relaxed">
+          Share your transaction view with a partner, parents, or roommates.
+          Each member's activity is stamped with their avatar.
+        </Text>
         <GradientCard padding="none" className="mb-8 overflow-hidden">
-          <Row
-            icon="moon-outline"
-            label="Dark Mode"
-            right={
-              <Switch
-                value={colorScheme === 'dark'}
-                onValueChange={val => setColorScheme(val ? 'dark' : 'light')}
-                trackColor={{ true: '#FF6B4A', false: '#1E212B' }}
-                thumbColor="#fff"
-              />
-            }
-          />
-          <Row
-            icon="finger-print-outline"
-            label="Biometric lock"
-            right={
-              <Switch
-                value={biometricEnabled}
-                onValueChange={(val) => void setBiometricEnabled(val)}
-                trackColor={{ true: '#FF6B4A', false: '#1E212B' }}
-                thumbColor="#fff"
-              />
-            }
-          />
-          <Row
-            icon="cash-outline"
-            label="Currency"
-            right={
-              <Text className="font-jakarta-bold text-text-low text-xs uppercase tracking-widest">
-                SGD
+          <Pressable
+            onPress={() => router.push('/groups')}
+            className="flex-row justify-between items-center p-5 active:bg-surface-3">
+            <View className="flex-row items-center gap-4">
+              <View
+                className="w-9 h-9 rounded-2xl justify-center items-center"
+                style={{ backgroundColor: 'rgba(91, 224, 176, 0.15)' }}>
+                <Ionicons name="people" size={14} color="#5BE0B0" />
+              </View>
+              <Text className="font-jakarta-bold text-text-high text-sm">
+                Manage groups & invites
               </Text>
-            }
-            last
-          />
+            </View>
+            <Ionicons name="chevron-forward" size={14} color={themeColors.textLow} />
+          </Pressable>
         </GradientCard>
 
         {/* ── Vault Config ────────────────────────────────────────────
@@ -237,33 +229,6 @@ export default function SettingsScreen() {
           </Pressable>
         </GradientCard>
 
-        {/* ── Vault Groups ────────────────────────────────────────────
-            Manage shared groups: who's in your active vault, invite
-            new members via a universal link, switch between multiple
-            groups, leave. See PRD 10 + ARCH_VAULT_GROUPS. */}
-        <Text className="font-jakarta-bold text-text-high text-xl mb-1">Vault Groups</Text>
-        <Text className="font-jakarta text-text-low text-xs mb-5 leading-relaxed">
-          Share your transaction view with a partner, parents, or roommates.
-          Each member's activity is stamped with their avatar.
-        </Text>
-        <GradientCard padding="none" className="mb-8 overflow-hidden">
-          <Pressable
-            onPress={() => router.push('/groups')}
-            className="flex-row justify-between items-center p-5 active:bg-surface-3">
-            <View className="flex-row items-center gap-4">
-              <View
-                className="w-9 h-9 rounded-2xl justify-center items-center"
-                style={{ backgroundColor: 'rgba(91, 224, 176, 0.15)' }}>
-                <Ionicons name="people" size={14} color="#5BE0B0" />
-              </View>
-              <Text className="font-jakarta-bold text-text-high text-sm">
-                Manage groups & invites
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={14} color={themeColors.textLow} />
-          </Pressable>
-        </GradientCard>
-
         {/* ── Privacy ──────────────────────────────────────────────────
             Manage on-device bank PDF passwords — see PRD 09 §4.4 / the
             Zero Cloud Lock-in commitment in CLAUDE.md. */}
@@ -288,6 +253,44 @@ export default function SettingsScreen() {
             </View>
             <Ionicons name="chevron-forward" size={14} color={themeColors.textLow} />
           </Pressable>
+        </GradientCard>
+
+        <Text className="font-jakarta-bold text-text-high text-xl mb-5">Preferences</Text>
+        <GradientCard padding="none" className="mb-8 overflow-hidden">
+          <Row
+            icon="moon-outline"
+            label="Dark Mode"
+            right={
+              <Switch
+                value={colorScheme === 'dark'}
+                onValueChange={val => setColorScheme(val ? 'dark' : 'light')}
+                trackColor={{ true: '#FF6B4A', false: '#1E212B' }}
+                thumbColor="#fff"
+              />
+            }
+          />
+          <Row
+            icon="finger-print-outline"
+            label="Biometric lock"
+            right={
+              <Switch
+                value={biometricEnabled}
+                onValueChange={(val) => void setBiometricEnabled(val)}
+                trackColor={{ true: '#FF6B4A', false: '#1E212B' }}
+                thumbColor="#fff"
+              />
+            }
+          />
+          <Row
+            icon="cash-outline"
+            label="Currency"
+            right={
+              <Text className="font-jakarta-bold text-text-low text-xs uppercase tracking-widest">
+                SGD
+              </Text>
+            }
+            last
+          />
         </GradientCard>
 
         <Text className="font-jakarta-bold text-text-high text-xl mb-1">Copilot Personas</Text>

@@ -18,6 +18,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -78,11 +79,54 @@ export default function GroupsScreen() {
   const generateInvite = useVaultGroupsStore(s => s.generateInvite);
   const leaveGroup = useVaultGroupsStore(s => s.leaveGroup);
   const consumeInvite = useVaultGroupsStore(s => s.consumeInvite);
+  const renameGroup = useVaultGroupsStore(s => s.renameGroup);
 
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [newEmoji, setNewEmoji] = useState<string>(GROUP_EMOJI_OPTIONS[0]);
   const [busyGroupId, setBusyGroupId] = useState<number | null>(null);
+
+  // Owner-only edit modal — bottom-sheet name + emoji editor, hidden
+  // unless the open id matches a group the user owns. We snapshot
+  // the draft locally so cancelling doesn't write through to the store.
+  const [editingGroupId, setEditingGroupId] = useState<number | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editEmoji, setEditEmoji] = useState<string>(GROUP_EMOJI_OPTIONS[0]);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const editingGroup = groups.find((g) => g.id === editingGroupId) ?? null;
+
+  const openEdit = (groupId: number, currentName: string, currentEmoji?: string | null) => {
+    setEditingGroupId(groupId);
+    setEditName(currentName);
+    setEditEmoji(currentEmoji ?? GROUP_EMOJI_OPTIONS[0]);
+  };
+  const closeEdit = () => {
+    setEditingGroupId(null);
+    setSavingEdit(false);
+  };
+  const commitEdit = async () => {
+    if (editingGroupId === null) return;
+    const trimmed = editName.trim();
+    if (!trimmed) {
+      Alert.alert('Name required', 'Give the group a name.');
+      return;
+    }
+    if (trimmed.length > 64) {
+      Alert.alert('Too long', 'Group name must be 64 characters or fewer.');
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      await renameGroup(editingGroupId, trimmed, editEmoji);
+      closeEdit();
+    } catch (err: any) {
+      Alert.alert(
+        'Could not save group',
+        err?.response?.data?.detail ?? 'Please try again.',
+      );
+      setSavingEdit(false);
+    }
+  };
 
   useEffect(() => {
     void syncFromBackend();
@@ -335,6 +379,13 @@ export default function GroupsScreen() {
                           {busyGroupId === g.id ? 'Generating…' : 'Invite'}
                         </Text>
                       </Pressable>
+                      {isOwner && (
+                        <Pressable
+                          onPress={() => openEdit(g.id, g.name, g.emoji)}
+                          className="px-4 py-3 rounded-xl bg-surface-3 border border-hairline">
+                          <Ionicons name="pencil" size={16} color={themeColors.textMid} />
+                        </Pressable>
+                      )}
                       <Pressable
                         onPress={() => confirmLeave(g.id, g.name, isOwner)}
                         className="px-4 py-3 rounded-xl bg-surface-3 border border-hairline">
@@ -405,6 +456,102 @@ export default function GroupsScreen() {
             </NeonButton>
           </GradientCard>
         </ScrollView>
+
+        {/* Owner-only rename + emoji bottom sheet. The Modal is mounted
+            only while open so the TextInput auto-focuses cleanly when
+            the sheet appears. */}
+        {editingGroupId !== null && (
+          <Modal
+            visible
+            transparent
+            animationType="fade"
+            onRequestClose={closeEdit}>
+            <Pressable
+              style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}
+              onPress={closeEdit}>
+              <Pressable
+                onPress={(e) => e.stopPropagation()}
+                style={{
+                  marginTop: 'auto',
+                  backgroundColor: themeColors.surface1,
+                  paddingTop: 16,
+                  paddingBottom: 32,
+                  paddingHorizontal: 24,
+                  borderTopLeftRadius: 32,
+                  borderTopRightRadius: 32,
+                  borderTopWidth: 1,
+                  borderTopColor: themeColors.hairline,
+                }}>
+                <View className="items-center mb-4">
+                  <View
+                    style={{
+                      width: 40,
+                      height: 4,
+                      borderRadius: 999,
+                      backgroundColor: themeColors.hairline,
+                    }}
+                  />
+                </View>
+                <View className="flex-row justify-between items-center mb-5">
+                  <Text className="font-jakarta-bold text-text-high text-lg">
+                    Edit group
+                  </Text>
+                  <Pressable
+                    onPress={closeEdit}
+                    className="w-9 h-9 rounded-full bg-surface-2 border border-hairline justify-center items-center">
+                    <Ionicons name="close" size={16} color={themeColors.textMid} />
+                  </Pressable>
+                </View>
+
+                <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-2 px-1">
+                  Name
+                </Text>
+                <TextInput
+                  value={editName}
+                  onChangeText={setEditName}
+                  placeholder={editingGroup?.name ?? 'Group name'}
+                  placeholderTextColor={themeColors.textDim}
+                  maxLength={64}
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={commitEdit}
+                  className="bg-surface-3 px-4 py-4 rounded-2xl text-text-high font-jakarta text-base border border-hairline mb-5"
+                />
+
+                <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-2 px-1">
+                  Emoji
+                </Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ gap: 8, paddingRight: 16 }}
+                  className="mb-6">
+                  {GROUP_EMOJI_OPTIONS.map((e) => {
+                    const picked = e === editEmoji;
+                    return (
+                      <Pressable
+                        key={e}
+                        onPress={() => setEditEmoji(e)}
+                        className="w-12 h-12 rounded-2xl justify-center items-center border"
+                        style={{
+                          backgroundColor: picked
+                            ? 'rgba(255, 107, 74, 0.14)'
+                            : themeColors.surface2,
+                          borderColor: picked ? '#FF6B4A' : themeColors.hairline,
+                        }}>
+                        <Text style={{ fontSize: 20 }}>{e}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+
+                <NeonButton size="md" block loading={savingEdit} onPress={commitEdit}>
+                  Save changes
+                </NeonButton>
+              </Pressable>
+            </Pressable>
+          </Modal>
+        )}
       </SafeAreaView>
     </Surface>
   );
