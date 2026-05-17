@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
 import {
+  API_CONFIG,
   DEV_DISABLE_AUTH,
   DEV_FAKE_TOKEN,
 } from '../constants/Config';
@@ -51,6 +52,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // Fire a no-auth warmup ping the moment the app starts so a sleeping
+    // Render instance begins waking in parallel with token refresh and
+    // SecureStore reads. On the free tier the wake-up takes 15-50s; if
+    // we wait until the first user-blocking request to trigger it, the
+    // home screen sits empty for the same duration. Fire-and-forget —
+    // we don't care about the response, only about kicking the instance.
+    void fetch(`${API_CONFIG.BASE_URL}/health`, { method: 'GET' }).catch(() => {
+      // Swallow — this is a warmup, not a precondition.
+    });
+
     void hydrate();
     // The apiClient's response interceptor calls these listeners when a
     // 401-driven refresh fails (refresh token revoked/expired). We drop
@@ -93,6 +104,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(fresh.user);
         setAccessToken(fresh.access_token);
         setRefreshToken(fresh.refresh_token);
+        // PERF (queued, see B1 in the home-tab cold-start audit):
+        // this await blocks setIsLoading(false), so AuthGuard keeps the
+        // Tabs unmounted until vault groups land — adds one RTT to TTI.
+        // Switching to a fire-and-forget bootstrap requires the home
+        // tab's syncData to wait for `activeGroupId` (subscribe to
+        // useVaultGroupsStore) before firing, otherwise financeApi
+        // calls go out without the X-Vault-Group-Id header and the
+        // backend rejects them as "no active group".
         await bootstrapVaultGroups();
       } catch {
         // Refresh token is dead — wipe and drop to /login.

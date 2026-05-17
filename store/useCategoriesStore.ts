@@ -131,35 +131,56 @@ export const useCategoriesStore = create<CategoriesState>((set, get) => ({
       // One-time bootstrap: when the backend lists are empty but the
       // local store has the seeded defaults (or user customizations),
       // push them up so the user's first sync doesn't wipe their state.
+      //
+      // Parallelised with Promise.all — used to be a for-await loop
+      // that fired 14 categories + 13 labels = 27 sequential POSTs,
+      // adding ~3-30s to the first sync depending on backend latency.
+      // Per-row failures are swallowed individually so one bad seed
+      // doesn't block the rest, and Promise.allSettled keeps the
+      // batch atomic even if some entries reject.
       if (serverCats.length === 0 && get().categories.length > 0) {
-        const pushed: ApiCategory[] = [];
-        for (const cat of get().categories) {
-          try {
-            const res = await categoriesApi.create({
+        const localCats = get().categories;
+        const results = await Promise.allSettled(
+          localCats.map((cat) =>
+            categoriesApi.create({
               name: cat.name,
               kind: cat.kind as CategoryKindDto,
               icon: cat.icon as string,
               color: cat.color,
-            });
-            pushed.push(res.data);
-          } catch (err) {
-            // Swallow per-row failures so one bad seed doesn't block
-            // the rest; next sync round will retry.
-            console.warn('Failed to bootstrap category to backend', cat.name, err);
+            }),
+          ),
+        );
+        const pushed: ApiCategory[] = [];
+        results.forEach((res, i) => {
+          if (res.status === 'fulfilled') {
+            pushed.push(res.value.data);
+          } else {
+            console.warn(
+              'Failed to bootstrap category to backend',
+              localCats[i].name,
+              res.reason,
+            );
           }
-        }
+        });
         serverCats = pushed;
       }
       if (serverLbls.length === 0 && get().labels.length > 0) {
+        const localLbls = get().labels;
+        const results = await Promise.allSettled(
+          localLbls.map((lbl) => labelsApi.create(lbl.name)),
+        );
         const pushed: ApiLabel[] = [];
-        for (const lbl of get().labels) {
-          try {
-            const res = await labelsApi.create(lbl.name);
-            pushed.push(res.data);
-          } catch (err) {
-            console.warn('Failed to bootstrap label to backend', lbl.name, err);
+        results.forEach((res, i) => {
+          if (res.status === 'fulfilled') {
+            pushed.push(res.value.data);
+          } else {
+            console.warn(
+              'Failed to bootstrap label to backend',
+              localLbls[i].name,
+              res.reason,
+            );
           }
-        }
+        });
         serverLbls = pushed;
       }
 
