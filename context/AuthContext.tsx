@@ -122,6 +122,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         activeWalletId: null,
         hasSynced: false,
         isSyncing: false,
+        // Clear the dev-seed lock so the new account gets a fresh
+        // seed (and a real account on the prod backend gets a clean
+        // server-driven sync without the lock blocking it).
+        hasUserData: false,
       });
       useCategoriesStore.setState({ categories: [], labels: [] });
       useVaultGroupsStore.setState({ groups: [], activeGroupId: null });

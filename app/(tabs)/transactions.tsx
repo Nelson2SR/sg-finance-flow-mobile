@@ -12,8 +12,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { format, isToday, isYesterday } from 'date-fns';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
+import { useLocalSearchParams } from 'expo-router';
 
-import { useFinanceStore } from '../../store/useFinanceStore';
+import { useFinanceStore, currentMonthCode } from '../../store/useFinanceStore';
 import { useCategoriesStore } from '../../store/useCategoriesStore';
 import { GradientCard, NeonButton, ScreenHeader, Skeleton, SkeletonRow, Surface, SurfaceHeaderArea } from '../../components/ui';
 import { FilterPill } from '../../components/features/FilterPill';
@@ -32,8 +33,18 @@ export default function TransactionsScreen() {
   const hasSynced = useFinanceStore(s => s.hasSynced);
   const syncData = useFinanceStore(s => s.syncData);
 
-  const [monthFilter, setMonthFilter] = useState<MonthYearValue>('ALL');
-  const [walletFilter, setWalletFilter] = useState<string | null>(null); // null = All wallets
+  // Optional deep-link params: Home pushes here after a successful
+  // Add Entry / Magic Scan with `month=YYYY-MM&walletId=...` so the
+  // user lands on filters that surface their fresh transactions.
+  // Absent params, fall back to "current month + active wallet".
+  const params = useLocalSearchParams<{ month?: string; walletId?: string }>();
+
+  const [monthFilter, setMonthFilter] = useState<MonthYearValue>(
+    (params.month as MonthYearValue | undefined) ?? currentMonthCode(),
+  );
+  const [walletFilter, setWalletFilter] = useState<string | null>(
+    (params.walletId as string | undefined) ?? null, // null = All wallets
+  );
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null); // null = All categories
   const [labelFilter, setLabelFilter] = useState<string | null>(null); // null = All labels
   const [showSearch, setShowSearch] = useState(false);
@@ -42,23 +53,40 @@ export default function TransactionsScreen() {
   const allLabels = useCategoriesStore(s => s.labels);
   const allCategoriesList = useCategoriesStore(s => s.categories);
 
+  // Re-apply deep-link params on every navigation. Without this, a
+  // second push from Home (e.g. user adds another entry) would NOT
+  // update the filters because the tab is already mounted and state
+  // is preserved across pushes. Also clear any unrelated filters
+  // that were sticky from a previous browse — otherwise the user
+  // jumps to Activity, sees an empty list because of a stale
+  // category/label filter, and assumes the new entry didn't save.
+  useEffect(() => {
+    if (!params.month && !params.walletId) return;
+    if (params.month) setMonthFilter(params.month as MonthYearValue);
+    if (params.walletId) setWalletFilter(params.walletId);
+    setCategoryFilter(null);
+    setLabelFilter(null);
+    setSearchQuery('');
+    setShowSearch(false);
+  }, [params.month, params.walletId]);
+
   // Default the Wallet filter to whichever wallet is currently active
   // in the store — the user's expectation is "show my wallet first,
-  // not everyone's transactions in the active vault group."
+  // not everyone's transactions in the active vault group." Only
+  // kicks in when no deep-link wallet was passed.
   useEffect(() => {
     if (walletFilter === null && activeWalletId) {
       setWalletFilter(activeWalletId);
     }
   }, [activeWalletId, walletFilter]);
 
-  // Whenever any filter changes, kick off a fresh sync so the user
-  // sees a brief refresh spinner and the underlying data is current.
-  // The client-side filter below still does the actual filtering;
-  // syncing keeps the dataset honest with the backend.
-  useEffect(() => {
-    void syncData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [monthFilter, walletFilter, categoryFilter, labelFilter]);
+  // Filter changes are intentionally local-only — they no longer
+  // trigger a backend sync. The earlier "refresh on filter change"
+  // behaviour was nice cosmetically (it flashed the pull-to-refresh
+  // spinner) but caused a destructive bug: after Add Entry pushed a
+  // deep-link here, the sync wiped the just-added local transaction
+  // because the dev backend has no POST endpoint to persist it. The
+  // explicit pull-to-refresh gesture remains the way to re-fetch.
 
   const { start: monthStart, end: monthEnd } = useMemo(
     () => monthYearToRange(monthFilter),
@@ -126,19 +154,31 @@ export default function TransactionsScreen() {
     ],
     [wallets],
   );
-  const categoryOptions = useMemo(
-    () => [
-      { value: null, label: 'All categories' },
-      ...allCategoriesList
-        .filter((c) => c.kind === 'expense' || c.kind === 'income')
-        .map((c) => ({
-          value: c.name,
-          label: c.name,
-          caption: c.kind === 'income' ? 'Income' : 'Expense',
-        })),
-    ],
-    [allCategoriesList],
-  );
+  const categoryOptions = useMemo(() => {
+    // Dedupe by NAME — the filter matches transactions by category
+    // name, not by id, so an "Other" that exists in both the
+    // expense and income kinds should collapse to a single picker
+    // row. Picking it returns both income and expense "Other"
+    // transactions, which is the natural read.
+    const byName = new Map<string, { kinds: Set<'expense' | 'income'> }>();
+    for (const c of allCategoriesList) {
+      if (c.kind !== 'expense' && c.kind !== 'income') continue;
+      const entry = byName.get(c.name) ?? { kinds: new Set() };
+      entry.kinds.add(c.kind);
+      byName.set(c.name, entry);
+    }
+    const rows = Array.from(byName.entries()).map(([name, { kinds }]) => ({
+      value: name,
+      label: name,
+      caption:
+        kinds.size === 2
+          ? 'Income & Expense'
+          : kinds.has('income')
+            ? 'Income'
+            : 'Expense',
+    }));
+    return [{ value: null, label: 'All categories' }, ...rows];
+  }, [allCategoriesList]);
   const labelOptions = useMemo(
     () => [
       { value: null, label: 'All labels' },

@@ -61,10 +61,21 @@ interface TrendChartProps {
    * 6-month window with it.
    */
   anchorMonth?: string;
+  /**
+   * When set, scope the series to a single wallet (Home uses this so
+   * the bars track the currently-swiped wallet card). When omitted,
+   * the chart aggregates across every wallet — useful for the
+   * Insights view where wallets aren't the lens.
+   */
+  walletId?: string | null;
 }
 
-export const TrendChart = ({ anchorMonth }: TrendChartProps = {}) => {
-  const transactions = useFinanceStore(s => s.transactions);
+export const TrendChart = ({ anchorMonth, walletId }: TrendChartProps = {}) => {
+  const allTransactions = useFinanceStore(s => s.transactions);
+  const transactions = useMemo(
+    () => (walletId ? allTransactions.filter((t) => t.walletId === walletId) : allTransactions),
+    [allTransactions, walletId],
+  );
 
   const anchorDate = useMemo(() => {
     if (!anchorMonth) return new Date();

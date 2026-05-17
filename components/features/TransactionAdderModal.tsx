@@ -4,9 +4,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format, isToday, isYesterday } from 'date-fns';
+import { useRouter } from 'expo-router';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { useCategoriesStore } from '../../store/useCategoriesStore';
 import { useThemeColors } from '../../hooks/use-theme-colors';
+
+/** Format a Date as `YYYY-MM` for the Activity tab's month filter. */
+function dateToMonthCode(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
 
 interface Props {
   visible: boolean;
@@ -15,6 +21,7 @@ interface Props {
 
 export function TransactionAdderModal({ visible, onClose }: Props) {
   const themeColors = useThemeColors();
+  const router = useRouter();
   const [amount, setAmount] = useState('0');
   const [type, setType] = useState<'EXPENSE' | 'INCOME'>('EXPENSE');
   // Selected category is keyed by ID so a rename in Vault Config keeps
@@ -104,6 +111,13 @@ export function TransactionAdderModal({ visible, onClose }: Props) {
     setAmount('0');
     setLabelIds([]);
     // categoryId is auto-reseeded on next open via the useEffect above.
+
+    // Hop to the Activity tab with filters pre-set to the new entry's
+    // month + wallet so the user immediately sees where it landed.
+    router.push({
+      pathname: '/(tabs)/transactions',
+      params: { month: dateToMonthCode(date), walletId },
+    });
   };
 
   const toggleLabel = (id: string) =>

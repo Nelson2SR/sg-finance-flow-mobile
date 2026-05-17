@@ -121,6 +121,29 @@ interface FinanceState {
    * of success. Stays true across subsequent syncs so we don't
    * re-show the cold-start skeleton on every pull-to-refresh. */
   hasSynced: boolean;
+  /**
+   * Sentinel flipped to true the moment the user mutates anything
+   * locally (addTransaction, addWallet, addBudget, etc.). Two
+   * behaviours hang off it:
+   *
+   *   1. In `__DEV__` mode the backend currently has no
+   *      POST /transactions endpoint, so the dev-seed branch
+   *      pretends to be the source of truth. Without this flag,
+   *      every subsequent `syncData` would overwrite the user's
+   *      local additions with the empty backend payload and then
+   *      re-seed from scratch, silently destroying their input.
+   *      When `hasUserData === true`, `syncData` becomes a no-op
+   *      in dev so the user's work survives refreshes.
+   *
+   *   2. The seed itself gates on `!hasUserData` defensively so
+   *      it never overwrites real user state, even if something
+   *      else briefly clears `transactions`.
+   *
+   * AuthContext resets this on account switch / logout — a new
+   * user should get a fresh seed, not the previous account's
+   * "user has data" lock.
+   */
+  hasUserData: boolean;
   
   // Actions
   setActiveWallet: (id: string) => void;
@@ -189,11 +212,13 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
 
   isSyncing: false,
   hasSynced: false,
+  hasUserData: false,
 
   setActiveWallet: (id) => set({ activeWalletId: id }),
 
   addWallet: (wallet) => set((state) => ({
-    wallets: [...state.wallets, { ...wallet, id: mintId('w') }]
+    wallets: [...state.wallets, { ...wallet, id: mintId('w') }],
+    hasUserData: true,
   })),
 
   addBudget: ({ amount, ...rest }) => set((state) => {
@@ -203,6 +228,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         ...state.budgets,
         { ...rest, id: mintId('b'), versions: [{ effectiveFrom, amount }] },
       ],
+      hasUserData: true,
     };
   }),
 
@@ -220,11 +246,13 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         nextVersions.sort((a, c) => a.effectiveFrom.localeCompare(c.effectiveFrom));
         return { ...b, versions: nextVersions };
       }),
+      hasUserData: true,
     };
   }),
 
   deleteBudget: (id) => set((state) => ({
     budgets: state.budgets.filter((b) => b.id !== id),
+    hasUserData: true,
   })),
 
   addTransaction: (tx, skipSync = false) => set((state) => {
@@ -235,7 +263,8 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
 
     return {
       transactions: [newTx, ...state.transactions],
-      wallets: state.wallets.map(w => w.id === tx.walletId ? { ...w, balance: w.balance + modifier } : w)
+      wallets: state.wallets.map(w => w.id === tx.walletId ? { ...w, balance: w.balance + modifier } : w),
+      hasUserData: true,
     };
   }),
 
@@ -274,12 +303,26 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       wallets: s.wallets.map((w) =>
         deltas.has(w.id) ? { ...w, balance: w.balance + (deltas.get(w.id) || 0) } : w,
       ),
+      hasUserData: true,
     }));
 
     return { added, skipped };
   },
 
   syncData: async () => {
+    // Dev short-circuit: once the user has touched any local data
+    // (addTransaction / addWallet / etc.), the dev seed is the
+    // de-facto source of truth and the backend has no way to
+    // persist their changes (no POST /transactions). Without this
+    // guard, every subsequent syncData would call set({transactions:
+    // backend}) which is empty → wipes the user's manual entries.
+    // In production this branch never trips because hasUserData
+    // starts false and addTransaction will (eventually) push to the
+    // backend.
+    if (__DEV__ && get().hasUserData) {
+      set({ isSyncing: false, hasSynced: true });
+      return;
+    }
     set({ isSyncing: true });
     try {
       const [accountsRes, txsRes] = await Promise.all([
@@ -349,7 +392,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       //
       // The moment the user adds even one real transaction, this
       // branch goes cold and stays cold.
-      if (__DEV__ && get().transactions.length === 0) {
+      if (__DEV__ && !get().hasUserData && get().transactions.length === 0) {
         const { DEV_SEED } = await import('../lib/devSeedData');
         set({
           wallets: [...DEV_SEED.wallets],
@@ -367,17 +410,19 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       transactions: state.transactions.map(t =>
         t.id === id ? { ...t, labels: labels.length > 0 ? labels : undefined } : t,
       ),
+      hasUserData: true,
     })),
 
   deleteTransaction: (id) => set((state) => {
     const tx = state.transactions.find(t => t.id === id);
     if (!tx) return state;
-    
+
     // Reverse the wallet balance impact
     const modifier = tx.type === 'INCOME' ? -tx.amount : tx.amount;
     return {
       transactions: state.transactions.filter(t => t.id !== id),
-      wallets: state.wallets.map(w => w.id === tx.walletId ? { ...w, balance: w.balance + modifier } : w)
+      wallets: state.wallets.map(w => w.id === tx.walletId ? { ...w, balance: w.balance + modifier } : w),
+      hasUserData: true,
     };
   }),
 
