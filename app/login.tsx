@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   Alert,
+  Image,
   Platform,
   Pressable,
   Text,
@@ -227,10 +228,24 @@ export default function LoginScreen() {
     <Surface halo>
       <SafeAreaView className={innerContainerClass}>
         <View className="items-center mb-10">
+          {/* App icon — same image used as the iOS app icon. The
+              borderRadius matches Apple's squircle proportion
+              (~22.37% of side length, so 18px on an 80px frame) so
+              the rendered logo here previews the same shape the
+              system uses on the home screen. overflow:hidden clips
+              the PNG's white corners (the icon ships flattened for
+              App Store Connect compliance). */}
           <View
-            className="w-20 h-20 rounded-[24px] bg-accent-coral justify-center items-center mb-6"
-            style={{ boxShadow: '0 0 32px rgba(255, 107, 74, 0.55)' }}>
-            <Ionicons name="shield-checkmark" size={40} color="white" />
+            className="w-20 h-20 mb-6 overflow-hidden"
+            style={{
+              borderRadius: 18,
+              boxShadow: '0 0 32px rgba(255, 107, 74, 0.55)',
+            }}>
+            <Image
+              source={require('../assets/images/icon.png')}
+              style={{ width: 80, height: 80 }}
+              resizeMode="cover"
+            />
           </View>
           <Text className="font-jakarta-bold text-text-high text-[36px] tracking-tighter text-center">
             {title}
