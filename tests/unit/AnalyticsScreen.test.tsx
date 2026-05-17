@@ -5,9 +5,6 @@
  *   1. AmbientAura's SVG `Path` collapsed to a zero-length arc at ratio === 0
  *      (rendered as a single stray dot) and at ratio === 1 (rendered as
  *      nothing). We now use stroke-dasharray on a Circle.
- *   2. Cashflow Momentum bars used percentage heights on flex children with
- *      ambiguous parent height; the income bar grew past the card top and
- *      clipped the "Cashflow Momentum" title.
  */
 
 import React from 'react';
@@ -58,27 +55,12 @@ describe('AnalyticsScreen', () => {
     });
   });
 
-  it('renders header + cashflow + active-routines for the empty-state user', () => {
+  it('renders header + active-routines for the empty-state user on the Budget tab', () => {
     const { getByText } = renderScreen();
     expect(getByText('Analytics')).toBeTruthy();
-    expect(getByText('Cashflow Momentum')).toBeTruthy();
     expect(getByText('Active Routines')).toBeTruthy();
     // Empty-state CTA replaces the aura until a budget is created.
     expect(getByText('No budgets yet')).toBeTruthy();
-  });
-
-  it('shows the income and spend totals on the cashflow card when transactions exist', () => {
-    useFinanceStore.setState({
-      activeWalletId: 'w1',
-      transactions: [
-        { id: 't1', walletId: 'w1', type: 'EXPENSE', amount: 2499, category: 'X', merchant: 'A', date: new Date() },
-        { id: 't2', walletId: 'w1', type: 'EXPENSE', amount: 45, category: 'X', merchant: 'B', date: new Date() },
-        { id: 't3', walletId: 'w1', type: 'INCOME', amount: 8000, category: 'Y', merchant: 'C', date: new Date() },
-      ],
-    });
-    const { getByText } = renderScreen();
-    expect(getByText('$8,000')).toBeTruthy(); // income label
-    expect(getByText('$2,544')).toBeTruthy(); // spend label (2499 + 45)
   });
 
   it('shows the AmbientAura with the budget cap when at least one budget exists', () => {

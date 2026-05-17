@@ -455,23 +455,6 @@ export default function SettingsScreen() {
             <Ionicons name="chevron-forward" size={14} color={themeColors.textLow} />
           </Pressable>
         </GradientCard>
-
-        <Text className="font-jakarta-bold text-text-high text-xl mb-5">Security Zone</Text>
-        <Pressable>
-          <GradientCard padding="lg" accent="rose" radius="card" className="mb-8">
-            <View className="flex-row justify-between items-center">
-              <View className="flex-1 pr-4">
-                <Text className="font-jakarta-bold text-accent-rose text-base mb-1">
-                  Purge Local Keychain
-                </Text>
-                <Text className="font-jakarta text-text-mid text-xs leading-relaxed">
-                  Flush all cryptographic parameters and reset the local storage.
-                </Text>
-              </View>
-              <Ionicons name="skull-outline" size={22} color="#FF5C7C" />
-            </View>
-          </GradientCard>
-        </Pressable>
       </ScrollView>
     </Surface>
   );

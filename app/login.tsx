@@ -59,7 +59,7 @@ export default function LoginScreen() {
 
   const [step, setStep] = useState<Step>('landing');
   const [phone, setPhone] = useState('+65');
-  const [otp, setOtp] = useState(DEV_PHONE_OTP_BYPASS ? DEV_PHONE_OTP_CODE : '');
+  const [otp, setOtp] = useState('');
   const [isBusy, setIsBusy] = useState(false);
   const [focused, setFocused] = useState<string | null>(null);
 
@@ -348,7 +348,7 @@ export default function LoginScreen() {
             <Pressable
               onPress={() => {
                 setStep(step === 'otp' ? 'phone' : 'landing');
-                setOtp(DEV_PHONE_OTP_BYPASS ? DEV_PHONE_OTP_CODE : '');
+                setOtp('');
               }}>
               <Text className="font-jakarta-bold text-text-dim text-[10px] uppercase tracking-widest">
                 {step === 'otp' ? '← Change phone' : '← Back'}

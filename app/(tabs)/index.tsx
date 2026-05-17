@@ -20,7 +20,6 @@ import { useFinanceStore } from '../../store/useFinanceStore';
 import { TransactionAdderModal } from '../../components/features/TransactionAdderModal';
 import { CreateVaultModal } from '../../components/features/CreateVaultModal';
 import { TrendChart } from '../../components/features/TrendChart';
-import { CategoryDonut } from '../../components/features/CategoryDonut';
 import { MagicScanWindow } from '../../components/features/MagicScanWindow';
 import { scanDocumentWithGemini, ScanResponse, ScannedTransaction, ScanTaxonomy } from '../../services/geminiService';
 import { parsePdfWithPasswordFlow } from '../../services/uploadService';
@@ -183,6 +182,23 @@ export default function HomeScreen() {
     );
 
     setScanModalVisible(false);
+
+    // Hop to the Activity tab so the user can immediately see where
+    // the scanned rows landed. Anchors to the LATEST added tx's
+    // month — most Magic Scans are of a recent statement so this
+    // typically lines up with the current month; the user can scroll
+    // the picker back if their statement spanned earlier months.
+    if (added.length > 0) {
+      const latest = added.reduce(
+        (acc, t) => (t.date > acc ? t.date : acc),
+        added[0].date,
+      );
+      const month = `${latest.getFullYear()}-${String(latest.getMonth() + 1).padStart(2, '0')}`;
+      router.push({
+        pathname: '/(tabs)/transactions',
+        params: { month, walletId: targetWalletId },
+      });
+    }
 
     if (skipped > 0) {
       Alert.alert(
@@ -551,29 +567,7 @@ export default function HomeScreen() {
         )}
 
         <View className="px-6">
-          <TrendChart />
-
-          {/* Two pies — Spend then Income — both for the previous
-              calendar month. Symmetric windows make the side-by-side
-              comparison meaningful. Hidden until the user has at
-              least one wallet so the onboarding checklist owns the
-              cold start. Filters to the active wallet. */}
-          {wallets.length > 0 && (
-            <>
-              <CategoryDonut
-                transactions={transactions.filter((t) => t.walletId === activeWalletId)}
-                categories={categoriesByKind}
-                txType="EXPENSE"
-                window="last-month"
-              />
-              <CategoryDonut
-                transactions={transactions.filter((t) => t.walletId === activeWalletId)}
-                categories={categoriesByKind}
-                txType="INCOME"
-                window="last-month"
-              />
-            </>
-          )}
+          <TrendChart walletId={activeWalletId} />
         </View>
       </ScrollView>
 

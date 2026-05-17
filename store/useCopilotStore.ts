@@ -78,28 +78,43 @@ interface CopilotState {
   setPersonaTyping: (persona: CopilotPersona, isTyping: boolean) => void;
   togglePersona: (persona: CopilotPersona) => void;
   clearChat: () => void;
+  /**
+   * Seed a persona's opening message. Idempotent — if a welcome bubble
+   * for this persona is already present, this is a no-op. The chat
+   * screen calls this on mount with a text derived from the user's
+   * actual finance data so the advisor never fabricates numbers.
+   */
+  seedWelcomeMessage: (persona: CopilotPersona, text: string) => void;
 }
 
-const WELCOME: Record<CopilotPersona, string> = {
-  advisor:
-    'Hello! I noticed your Transport spend is up 20% this week. Want me to break down your Grab receipts?',
+// Static welcome text for personas whose opener doesn't depend on
+// finance data. The `advisor` persona is intentionally absent — its
+// opener is data-derived by `buildAdvisorGreeting` and seeded from
+// the chat screen at mount.
+const STATIC_WELCOME: Partial<Record<CopilotPersona, string>> = {
   friend:
     "Hey — I'm here whenever you want to talk. Money stuff, day stuff, anything. No pressure.",
 };
 
-const seedMessage = (persona: CopilotPersona): ChatMessage => ({
-  id: `welcome:${persona}`,
-  sender: 'bot',
-  persona,
-  text: WELCOME[persona],
-  timestamp: new Date(),
-});
-
 const nextId = () =>
   Date.now().toString() + Math.random().toString(36).slice(2, 6);
 
+const staticSeedMessage = (persona: CopilotPersona): ChatMessage | null => {
+  const text = STATIC_WELCOME[persona];
+  if (!text) return null;
+  return {
+    id: `welcome:${persona}:${nextId()}`,
+    sender: 'bot',
+    persona,
+    text,
+    timestamp: new Date(),
+  };
+};
+
 export const useCopilotStore = create<CopilotState>(set => ({
-  messages: [seedMessage('advisor')],
+  // No advisor seed at module init — the chat screen seeds a
+  // data-derived greeting once the finance store has hydrated.
+  messages: [],
   typingPersonas: [],
   enabledPersonas: ['advisor'],
 
@@ -154,19 +169,43 @@ export const useCopilotStore = create<CopilotState>(set => ({
           enabledPersonas: state.enabledPersonas.filter(p => p !== persona),
         };
       }
-      // Adding a persona — also drop their welcome message so the user
-      // sees the new voice introduce itself.
+      // Adding a persona — drop a static welcome where one exists. The
+      // advisor opener is data-derived and seeded by the chat screen
+      // instead, so adding/re-adding advisor here just enables it.
+      const seed = staticSeedMessage(persona);
       return {
         enabledPersonas: [...state.enabledPersonas, persona],
-        messages: [
-          ...state.messages,
-          { ...seedMessage(persona), id: `welcome:${persona}:${nextId()}` },
-        ],
+        messages: seed ? [...state.messages, seed] : state.messages,
       };
     }),
 
   clearChat: () =>
+    // Reset to empty; the chat screen's effect re-seeds the advisor
+    // welcome from the latest finance snapshot, and static personas
+    // (friend) get a fresh hello if they're enabled.
     set(state => ({
-      messages: state.enabledPersonas.map(seedMessage),
+      messages: state.enabledPersonas
+        .map(staticSeedMessage)
+        .filter((m): m is ChatMessage => m !== null),
     })),
+
+  seedWelcomeMessage: (persona, text) =>
+    set(state => {
+      const alreadySeeded = state.messages.some(
+        m => m.persona === persona && m.id.startsWith(`welcome:${persona}`),
+      );
+      if (alreadySeeded) return state;
+      return {
+        messages: [
+          ...state.messages,
+          {
+            id: `welcome:${persona}:${nextId()}`,
+            sender: 'bot',
+            persona,
+            text,
+            timestamp: new Date(),
+          },
+        ],
+      };
+    }),
 }));

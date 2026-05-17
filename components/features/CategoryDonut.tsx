@@ -50,6 +50,13 @@ interface Props {
    * Defaults to `'last-month'` since that's the v1.0(4) Home design.
    */
   window?: 'last-month' | 'last-30-days';
+  /**
+   * Explicit `'YYYY-MM'` month override. When set, slices that
+   * specific calendar month and the title shows "Apr 2026". Takes
+   * precedence over `window`. Used by Insights, where the user
+   * drives the date themselves.
+   */
+  monthCode?: string;
 }
 
 interface Slice {
@@ -111,13 +118,25 @@ function buildSlices(
   };
 }
 
+function monthCodeRange(monthCode: string): { start: Date; end: Date; label: string } {
+  const [y, m] = monthCode.split('-').map((n) => parseInt(n, 10));
+  const start = new Date(y, m - 1, 1);
+  const end = new Date(y, m, 1);
+  const label = start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  return { start, end, label };
+}
+
 export function CategoryDonut({
   transactions,
   categories,
   txType = 'EXPENSE',
   window = 'last-month',
+  monthCode,
 }: Props) {
-  const range = useMemo(() => windowRange(window), [window]);
+  const range = useMemo(
+    () => (monthCode ? monthCodeRange(monthCode) : windowRange(window)),
+    [window, monthCode],
+  );
   const { slices, total } = useMemo(
     () => buildSlices(transactions, categories, txType, range),
     [transactions, categories, txType, range],

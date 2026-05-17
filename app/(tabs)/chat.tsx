@@ -15,6 +15,7 @@ import * as ImagePicker from 'expo-image-picker';
 
 import { useCopilotStore, WidgetPayload, CopilotPersona } from '../../store/useCopilotStore';
 import { useFinanceStore } from '../../store/useFinanceStore';
+import { buildAdvisorGreeting } from '../../lib/copilotInsights';
 import { scanDocumentWithGemini, ScanResponse, ScannedTransaction, ScanTaxonomy } from '../../services/geminiService';
 import { useCategoriesStore } from '../../store/useCategoriesStore';
 import {
@@ -77,9 +78,11 @@ export default function ChatCopilotScreen() {
   const enabledPersonas = useCopilotStore(s => s.enabledPersonas);
   const typingPersonas = useCopilotStore(s => s.typingPersonas);
   const setPersonaTyping = useCopilotStore(s => s.setPersonaTyping);
+  const seedWelcomeMessage = useCopilotStore(s => s.seedWelcomeMessage);
 
   const wallets = useFinanceStore(s => s.wallets);
   const transactions = useFinanceStore(s => s.transactions);
+  const budgets = useFinanceStore(s => s.budgets);
   const addTransactionsBatch = useFinanceStore(s => s.addTransactionsBatch);
   // Build the scan taxonomy from the user's Vault Config so Gemini
   // tags new rows with their configured categories + labels. The same
@@ -99,6 +102,20 @@ export default function ChatCopilotScreen() {
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResponse | null>(null);
   const [scanModalVisible, setScanModalVisible] = useState(false);
+
+  // Seed the advisor opener from the user's actual finance snapshot
+  // rather than a canned line. Runs whenever advisor is enabled and no
+  // welcome bubble for them exists yet — fires once at first chat
+  // visit, and again after `clearChat` resets the thread.
+  useEffect(() => {
+    if (!enabledPersonas.includes('advisor')) return;
+    const hasAdvisorWelcome = messages.some(
+      m => m.persona === 'advisor' && m.id.startsWith('welcome:advisor'),
+    );
+    if (hasAdvisorWelcome) return;
+    const text = buildAdvisorGreeting({ transactions, budgets, wallets });
+    seedWelcomeMessage('advisor', text);
+  }, [enabledPersonas, messages, transactions, budgets, wallets, seedWelcomeMessage]);
 
   // Build the per-call snapshot at send time so the LLM sees the latest
   // vaults + transactions even after the user just scanned a receipt.
