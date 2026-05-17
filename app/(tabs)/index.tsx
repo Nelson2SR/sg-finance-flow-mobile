@@ -22,11 +22,10 @@ import { useFinanceStore } from '../../store/useFinanceStore';
 import { TransactionAdderModal } from '../../components/features/TransactionAdderModal';
 import { CreateVaultModal } from '../../components/features/CreateVaultModal';
 import { TrendChart } from '../../components/features/TrendChart';
-import { MagicScanWindow } from '../../components/features/MagicScanWindow';
+import { MagicScanWindow, MagicScanPhase } from '../../components/features/MagicScanWindow';
 import { ScanResponse, ScannedTransaction, ScanTaxonomy } from '../../services/geminiService';
 import { parsePdfWithPasswordFlow, parseImageViaBackend } from '../../services/uploadService';
 import { useCategoriesStore } from '../../store/useCategoriesStore';
-import { MagicScanReviewModal } from '../../components/features/MagicScanModal';
 import { financeApi } from '../../services/apiClient';
 import { useAuth } from '../../context/AuthContext';
 import { DEV_DISABLE_AUTH } from '../../constants/Config';
@@ -79,11 +78,13 @@ export default function HomeScreen() {
   const [groupSwitcherVisible, setGroupSwitcherVisible] = React.useState(false);
   const setActiveGroup = useVaultGroupsStore(s => s.setActiveGroup);
 
-  const [isScanning, setIsScanning] = React.useState(false);
+  // Magic Scan is one Modal with four phases — picker → loading →
+  // review → error. See MagicScanWindow.tsx for why this is a single
+  // Modal and not two (iOS Modal-on-Modal racing). State is just the
+  // current phase + the parse result + the error message.
+  const [magicScanPhase, setMagicScanPhase] = React.useState<MagicScanPhase>('closed');
   const [scanResult, setScanResult] = React.useState<ScanResponse | null>(null);
   const [scanError, setScanError] = React.useState<string | null>(null);
-  const [scanModalVisible, setScanModalVisible] = React.useState(false);
-  const [scanWindowVisible, setScanWindowVisible] = React.useState(false);
 
   // Pull the user's configured categories + labels so the Magic Scan
   // LLM tags new rows with their own vocabulary, not a hardcoded enum.
@@ -170,19 +171,12 @@ export default function HomeScreen() {
   };
 
   const handleSelectFile = async (uri: string, mimeType: string) => {
-    // Two-Modal handoff: closing the picker (MagicScanWindow) and
-    // opening the review modal in the same render batch makes iOS
-    // queue the review modal behind the dismissing picker — so the
-    // spinner never appears for the receipt path (the PDF picker
-    // dismisses fast enough that the queue clears in time; image
-    // picker with allowsEditing runs a crop step and the dismiss
-    // animation is longer). Close the picker, wait one animation
-    // frame, then open the review modal so the spinner is visible.
-    setScanWindowVisible(false);
+    // Single-Modal flow: just transition the phase. The picker UI
+    // and the review/loading/error UI both render inside the same
+    // Modal mount — no Modal handoff, no presentation race.
     setScanError(null);
-    await new Promise<void>((resolve) => setTimeout(resolve, 320));
-    setScanModalVisible(true);
-    setIsScanning(true);
+    setScanResult(null);
+    setMagicScanPhase('loading');
 
     try {
       let data: ScanResponse | null;
@@ -198,6 +192,10 @@ export default function HomeScreen() {
         data = await parseImageViaBackend(uri, mimeType);
       }
       setScanResult(data);
+      // Empty array from a successful backend response still goes to
+      // review (the user sees "0 Transactions Found"); only true
+      // exceptions land in 'error'.
+      setMagicScanPhase('review');
     } catch (err: any) {
       console.warn('[MagicScan] parse failed', err);
       setScanResult(null);
@@ -210,6 +208,12 @@ export default function HomeScreen() {
       let msg: string;
       if (!err?.response) {
         msg = `Could not reach the backend. Check your connection or try again in a moment.`;
+      } else if (status === 502 || status === 503 || status === 504) {
+        // The apiClient interceptor already silently retried once after
+        // a 6s wait. If we still got 5xx, the backend is taking longer
+        // than usual to wake — surface that explicitly so the user
+        // knows it's transient and a re-tap will probably work.
+        msg = 'The backend is waking up after being idle. Give it 10–20 seconds and try again.';
       } else if (status === 401) {
         msg = `Your session expired. Sign in again and retry.`;
       } else if (status === 400 && typeof detail === 'string') {
@@ -220,15 +224,14 @@ export default function HomeScreen() {
         msg = err?.message ?? 'Something went wrong on the server. Please try again.';
       }
       setScanError(msg);
-    } finally {
-      setIsScanning(false);
+      setMagicScanPhase('error');
     }
   };
 
   const confirmScan = async (scannedTransactions: ScannedTransaction[]) => {
     if (!activeWalletId) {
       Alert.alert('No wallet yet', 'Create a wallet before importing transactions.');
-      setScanModalVisible(false);
+      setMagicScanPhase('closed');
       return;
     }
     const targetWalletId = activeWalletId;
@@ -246,7 +249,7 @@ export default function HomeScreen() {
       })),
     );
 
-    setScanModalVisible(false);
+    setMagicScanPhase('closed');
 
     // Hop to the Activity tab so the user can immediately see where
     // the scanned rows landed. Anchors to the LATEST added tx's
@@ -627,7 +630,7 @@ export default function HomeScreen() {
             size="lg"
             icon="flash-outline"
             block
-            onPress={() => setScanWindowVisible(true)}
+            onPress={() => setMagicScanPhase('picker')}
             style={{ flex: 1 }}>
             Magic Scan
           </NeonButton>
@@ -641,10 +644,10 @@ export default function HomeScreen() {
 
       <TransactionAdderModal visible={modalVisible} onClose={() => setModalVisible(false)} />
       <CreateVaultModal visible={vaultModalVisible} onClose={() => setVaultModalVisible(false)} />
-      <MagicScanReviewModal
-        visible={scanModalVisible}
-        onClose={() => setScanModalVisible(false)}
-        loading={isScanning}
+      <MagicScanWindow
+        phase={magicScanPhase}
+        onSelectFile={handleSelectFile}
+        onClose={() => setMagicScanPhase('closed')}
         scanData={scanResult}
         errorMessage={scanError}
         onConfirm={confirmScan}
@@ -660,11 +663,6 @@ export default function HomeScreen() {
               : prev,
           )
         }
-      />
-      <MagicScanWindow
-        visible={scanWindowVisible}
-        onClose={() => setScanWindowVisible(false)}
-        onSelectFile={handleSelectFile}
       />
 
       {/* Quick switch between Vault Groups without leaving Home.

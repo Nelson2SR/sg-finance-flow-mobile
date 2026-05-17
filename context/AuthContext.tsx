@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 
 import {
   API_CONFIG,
@@ -58,9 +59,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // we wait until the first user-blocking request to trigger it, the
     // home screen sits empty for the same duration. Fire-and-forget —
     // we don't care about the response, only about kicking the instance.
-    void fetch(`${API_CONFIG.BASE_URL}/health`, { method: 'GET' }).catch(() => {
-      // Swallow — this is a warmup, not a precondition.
-    });
+    const pingHealth = () => {
+      void fetch(`${API_CONFIG.BASE_URL}/health`, { method: 'GET' }).catch(() => {
+        // Swallow — this is a warmup, not a precondition.
+      });
+    };
+    pingHealth();
 
     void hydrate();
     // The apiClient's response interceptor calls these listeners when a
@@ -71,7 +75,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAccessToken(null);
       setRefreshToken(null);
     });
-    return unsub;
+
+    // Keep-alive: ping /health every 10 min while the app is in the
+    // foreground. Render's free tier spins instances down after ~15
+    // min of inactivity; this keeps the instance warm during a usage
+    // session so a user who scans receipts intermittently doesn't
+    // hit 502s mid-session. Resets timing on every foreground entry
+    // (and pings immediately to recover from a possible mid-session
+    // sleep that happened while backgrounded).
+    const KEEP_ALIVE_MS = 10 * 60 * 1000;
+    let keepAliveTimer: ReturnType<typeof setInterval> | null = null;
+    const startKeepAlive = () => {
+      if (keepAliveTimer) return;
+      keepAliveTimer = setInterval(pingHealth, KEEP_ALIVE_MS);
+    };
+    const stopKeepAlive = () => {
+      if (keepAliveTimer) {
+        clearInterval(keepAliveTimer);
+        keepAliveTimer = null;
+      }
+    };
+    const onAppStateChange = (next: AppStateStatus) => {
+      if (next === 'active') {
+        pingHealth();
+        startKeepAlive();
+      } else {
+        stopKeepAlive();
+      }
+    };
+    startKeepAlive();
+    const subscription = AppState.addEventListener('change', onAppStateChange);
+
+    return () => {
+      unsub();
+      stopKeepAlive();
+      subscription.remove();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

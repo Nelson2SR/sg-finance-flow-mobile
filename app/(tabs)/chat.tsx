@@ -349,6 +349,8 @@ export default function ChatCopilotScreen() {
         let msg: string;
         if (!err?.response) {
           msg = 'Could not reach the backend. Check your connection or try again in a moment.';
+        } else if (status === 502 || status === 503 || status === 504) {
+          msg = 'The backend is waking up after being idle. Give it 10–20 seconds and try again.';
         } else if (status === 401) {
           msg = 'Your session expired. Sign in again and retry.';
         } else if (typeof detail === 'string') {

@@ -65,7 +65,12 @@ apiClient.interceptors.request.use(async (config) => {
  * Callbacks registered via `onAuthFailed` fire when the refresh path
  * gives up; AuthContext uses this to drop in-memory user state.
  */
-type RetryConfig = InternalAxiosRequestConfig & { _isAuthRetry?: boolean };
+type RetryConfig = InternalAxiosRequestConfig & {
+  _isAuthRetry?: boolean;
+  /** Marks a request that has already been retried once for a
+   *  Render-side cold-start 502/503/504. Prevents loops. */
+  _isColdStartRetry?: boolean;
+};
 
 let refreshPromise: Promise<string | null> | null = null;
 const authFailedListeners = new Set<() => void>();
@@ -96,14 +101,39 @@ apiClient.interceptors.response.use(
   (resp) => resp,
   async (error: AxiosError) => {
     const original = error.config as RetryConfig | undefined;
+    const status = error.response?.status;
 
+    // ── Cold-start retry (502/503/504) ──────────────────────────────
+    // Render free tier spins instances down after idle gaps; the edge
+    // proxy returns 502/503/504 while the instance is mid-restart.
+    // The wake takes ~5-10s typically; retry once after a delay so the
+    // next request lands on the warm instance. Marked with
+    // `_isColdStartRetry` so we don't loop forever if the second
+    // attempt also fails. Auth endpoints are excluded — their 502s
+    // shouldn't be retried silently (they're rare and the user is
+    // already on a loading screen that can show real feedback).
+    if (
+      original &&
+      !original._isColdStartRetry &&
+      (status === 502 || status === 503 || status === 504) &&
+      !(typeof original.url === 'string' && original.url.startsWith('/auth/'))
+    ) {
+      original._isColdStartRetry = true;
+      // 6s is a sweet spot — Render's free-tier wake usually finishes
+      // in 3-8s; longer waits feel like the app is frozen and the
+      // user starts tapping things.
+      await new Promise<void>((resolve) => setTimeout(resolve, 6000));
+      return apiClient(original);
+    }
+
+    // ── 401 refresh-then-retry ──────────────────────────────────────
     // Bail unless this is a 401, we have a request to retry, and we
     // haven't already retried this request once (no infinite loops if
     // the refreshed token also 401s).
     if (
       !original ||
       original._isAuthRetry ||
-      error.response?.status !== 401
+      status !== 401
     ) {
       throw error;
     }

@@ -40,6 +40,17 @@ interface MagicScanModalProps {
   onEditTransaction?: (index: number, patch: Partial<ScannedTransaction>) => void;
 }
 
+/** Props for MagicScanReviewBody — the bottom-sheet panel with no
+ *  Modal wrapper. Mirrors MagicScanModalProps minus `visible`. */
+interface MagicScanReviewBodyProps {
+  onClose: () => void;
+  scanData: ScanResponse | null;
+  loading: boolean;
+  errorMessage?: string | null;
+  onConfirm: (data: ScannedTransaction[]) => void;
+  onEditTransaction?: (index: number, patch: Partial<ScannedTransaction>) => void;
+}
+
 const getTransactionIcon = (category: string | undefined) => {
   const cat = category?.toLowerCase() || 'other';
   switch (cat) {
@@ -56,15 +67,25 @@ const getTransactionIcon = (category: string | undefined) => {
   }
 };
 
-export const MagicScanReviewModal = ({
-  visible,
+/**
+ * The bottom-sheet panel without the surrounding Modal — exported so a
+ * caller that owns its own Modal (e.g. the unified Magic Scan flow on
+ * Home, where the picker phase and the review phase must share one
+ * Modal to avoid iOS Modal-stacking races) can render this panel
+ * inline.
+ *
+ * Layout matches MagicScanReviewModal's body exactly: an 85%-height
+ * surface-1 card with a coral close button and the three render
+ * phases (loading → review list → error fallback).
+ */
+export const MagicScanReviewBody = ({
   onClose,
   scanData,
   loading,
   errorMessage,
   onConfirm,
   onEditTransaction,
-}: MagicScanModalProps) => {
+}: MagicScanReviewBodyProps) => {
   const themeColors = useThemeColors();
   const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
   /** Open a per-row edit sheet when this is non-null. */
@@ -76,11 +97,11 @@ export const MagicScanReviewModal = ({
     }
   }, [scanData]);
 
-  // Reset edit-sheet state when the whole review modal closes so a
+  // Reset edit-sheet state whenever the loaded scan changes so a
   // stale index can't survive into the next scan.
   useEffect(() => {
-    if (!visible) setEditingIndex(null);
-  }, [visible]);
+    setEditingIndex(null);
+  }, [scanData]);
 
   const toggleSelect = (index: number) => {
     setSelectedIndices(prev =>
@@ -98,28 +119,24 @@ export const MagicScanReviewModal = ({
   const allSelected = scanData ? selectedIndices.length === scanData.transactions.length : false;
 
   return (
-    <Modal visible={visible} transparent animationType="slide">
-      <View className="flex-1 justify-end">
-        <BlurView intensity={90} tint="dark" className="absolute inset-0" />
+    <View
+      className="bg-surface-1 h-[85%] rounded-t-[40px] px-6 pt-8 pb-12"
+      style={{ borderTopWidth: 1, borderTopColor: themeColors.hairline }}>
+      <View className="flex-row justify-between items-center mb-8">
+        <View>
+          <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-1">
+            {scanData?.sourceType === 'ESTATEMENT' ? 'E-Statement Analysis' : 'Receipt Analysis'}
+          </Text>
+          <Text className="font-jakarta-bold text-text-high text-2xl">Review Entries</Text>
+        </View>
+        <Pressable
+          onPress={onClose}
+          className="w-10 h-10 rounded-full bg-surface-2 border border-hairline justify-center items-center">
+          <Ionicons name="close" size={20} color="#FF6B4A" />
+        </Pressable>
+      </View>
 
-        <View
-          className="bg-surface-1 h-[85%] rounded-t-[40px] px-6 pt-8 pb-12"
-          style={{ borderTopWidth: 1, borderTopColor: themeColors.hairline }}>
-          <View className="flex-row justify-between items-center mb-8">
-            <View>
-              <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-1">
-                {scanData?.sourceType === 'ESTATEMENT' ? 'E-Statement Analysis' : 'Receipt Analysis'}
-              </Text>
-              <Text className="font-jakarta-bold text-text-high text-2xl">Review Entries</Text>
-            </View>
-            <Pressable
-              onPress={onClose}
-              className="w-10 h-10 rounded-full bg-surface-2 border border-hairline justify-center items-center">
-              <Ionicons name="close" size={20} color="#FF6B4A" />
-            </Pressable>
-          </View>
-
-          {loading ? (
+      {loading ? (
             <View className="flex-1 justify-center items-center">
               <ActivityIndicator size="large" color="#FF6B4A" />
               <View className="mt-8 items-center">
@@ -268,24 +285,43 @@ export const MagicScanReviewModal = ({
             </View>
           )}
 
-          {/* Inline edit overlay — rendered on top of the review sheet
-              (absolute positioning, no nested Modal) when the user
-              taps a row body. Lets them fix LLM mistakes (wrong
-              amount, merchant, category, etc.) before committing. */}
-          {editingIndex !== null &&
-            scanData &&
-            scanData.transactions[editingIndex] &&
-            onEditTransaction && (
-              <ScanRowEditSheet
-                tx={scanData.transactions[editingIndex]}
-                onCancel={() => setEditingIndex(null)}
-                onSave={patch => {
-                  onEditTransaction(editingIndex, patch);
-                  setEditingIndex(null);
-                }}
-              />
-            )}
-        </View>
+      {/* Inline edit overlay — rendered on top of the review sheet
+          (absolute positioning, no nested Modal) when the user taps
+          a row body. Lets them fix LLM mistakes (wrong amount,
+          merchant, category, etc.) before committing. */}
+      {editingIndex !== null &&
+        scanData &&
+        scanData.transactions[editingIndex] &&
+        onEditTransaction && (
+          <ScanRowEditSheet
+            tx={scanData.transactions[editingIndex]}
+            onCancel={() => setEditingIndex(null)}
+            onSave={patch => {
+              onEditTransaction(editingIndex, patch);
+              setEditingIndex(null);
+            }}
+          />
+        )}
+    </View>
+  );
+};
+
+
+/**
+ * Backwards-compatible wrapper — keeps the standalone Modal+Blur for
+ * callers that own their flow (e.g. the chat tab's Magic Scan, which
+ * has no picker phase to coordinate with). Home goes through
+ * MagicScanWindow with the unified-phase Modal instead.
+ */
+export const MagicScanReviewModal = ({
+  visible,
+  ...bodyProps
+}: MagicScanModalProps) => {
+  return (
+    <Modal visible={visible} transparent animationType="slide">
+      <View className="flex-1 justify-end">
+        <BlurView intensity={90} tint="dark" className="absolute inset-0" />
+        <MagicScanReviewBody {...bodyProps} />
       </View>
     </Modal>
   );
