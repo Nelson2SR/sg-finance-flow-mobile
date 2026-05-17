@@ -22,6 +22,14 @@ interface MagicScanModalProps {
   onClose: () => void;
   scanData: ScanResponse | null;
   loading: boolean;
+  /**
+   * Human-readable error message when the parse failed. Optional.
+   * When set (and not loading), the modal renders the failure state
+   * with this message inline so the user can tell whether it was a
+   * network blip, an unsupported file, or a backend issue — not just
+   * the generic "failed to extract data" they used to see.
+   */
+  errorMessage?: string | null;
   onConfirm: (data: ScannedTransaction[]) => void;
   /**
    * Apply an edit to one parsed row. Optional so legacy callers without
@@ -53,6 +61,7 @@ export const MagicScanReviewModal = ({
   onClose,
   scanData,
   loading,
+  errorMessage,
   onConfirm,
   onEditTransaction,
 }: MagicScanModalProps) => {
@@ -237,11 +246,20 @@ export const MagicScanReviewModal = ({
               </View>
             </View>
           ) : (
-            <View className="flex-1 justify-center items-center">
+            <View className="flex-1 justify-center items-center px-6">
               <Ionicons name="alert-circle" size={56} color="#FF6B4A" />
               <Text className="font-jakarta-bold text-text-low mt-6 tracking-widest uppercase text-xs">
-                Failed to extract data
+                Couldn't read this file
               </Text>
+              {errorMessage ? (
+                <Text className="font-jakarta text-text-mid text-xs text-center mt-3 leading-relaxed">
+                  {errorMessage}
+                </Text>
+              ) : (
+                <Text className="font-jakarta text-text-mid text-xs text-center mt-3 leading-relaxed">
+                  The scanner didn't find any transactions. Try a clearer photo, or check your connection.
+                </Text>
+              )}
               <Pressable onPress={onClose} className="mt-6">
                 <Text className="font-jakarta-bold text-accent-coral text-sm">
                   Return to Manual Entry

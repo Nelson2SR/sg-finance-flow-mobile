@@ -26,15 +26,49 @@ export const MagicScanWindow = ({ visible, onClose, onSelectFile }: MagicScanWin
     }
   };
 
+  // Infer mime from the picker asset when the OS doesn't fill in
+  // `mimeType` (older Android, some iOS edits). Falls back to
+  // `image/jpeg` only as a last resort — but the explicit mime is
+  // important because iOS Camera returns HEIC by default and Gemini
+  // rejects HEIC bytes labelled as JPEG.
+  const inferMime = (asset: ImagePicker.ImagePickerAsset): string => {
+    if (asset.mimeType) return asset.mimeType;
+    const uri = asset.uri.toLowerCase();
+    if (uri.endsWith('.png')) return 'image/png';
+    if (uri.endsWith('.heic')) return 'image/heic';
+    if (uri.endsWith('.heif')) return 'image/heif';
+    if (uri.endsWith('.webp')) return 'image/webp';
+    return 'image/jpeg';
+  };
+
   const handleScanReceipt = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permission Denied', 'We need camera access to scan your receipts.');
       return;
     }
-    const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.8 });
-    if (!result.canceled && result.assets[0].uri) {
-      onSelectFile(result.assets[0].uri, 'image/jpeg');
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets[0]?.uri) {
+        onSelectFile(result.assets[0].uri, inferMime(result.assets[0]));
+      }
+    } catch (err: any) {
+      // iOS Simulator has no camera and throws "Camera not available
+      // on simulator" — without this catch, the rejection surfaces as
+      // the dev-mode red error overlay. Real devices never hit this.
+      const msg = String(err?.message ?? err ?? '');
+      if (/simulator/i.test(msg)) {
+        Alert.alert(
+          'No camera on simulator',
+          'The iOS Simulator has no camera. Use "Upload Photo" to pick from the photo library, or test on a real device.',
+        );
+      } else {
+        Alert.alert('Could not open camera', msg || 'Please try again.');
+      }
     }
   };
 
@@ -44,12 +78,17 @@ export const MagicScanWindow = ({ visible, onClose, onSelectFile }: MagicScanWin
       Alert.alert('Permission Denied', 'We need gallery access to upload photos.');
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      allowsEditing: true,
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0].uri) {
-      onSelectFile(result.assets[0].uri, 'image/jpeg');
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets[0]?.uri) {
+        onSelectFile(result.assets[0].uri, inferMime(result.assets[0]));
+      }
+    } catch (err: any) {
+      Alert.alert('Could not open photo library', String(err?.message ?? err ?? '') || 'Please try again.');
     }
   };
 

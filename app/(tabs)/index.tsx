@@ -23,8 +23,8 @@ import { TransactionAdderModal } from '../../components/features/TransactionAdde
 import { CreateVaultModal } from '../../components/features/CreateVaultModal';
 import { TrendChart } from '../../components/features/TrendChart';
 import { MagicScanWindow } from '../../components/features/MagicScanWindow';
-import { scanDocumentWithGemini, ScanResponse, ScannedTransaction, ScanTaxonomy } from '../../services/geminiService';
-import { parsePdfWithPasswordFlow } from '../../services/uploadService';
+import { ScanResponse, ScannedTransaction, ScanTaxonomy } from '../../services/geminiService';
+import { parsePdfWithPasswordFlow, parseImageViaBackend } from '../../services/uploadService';
 import { useCategoriesStore } from '../../store/useCategoriesStore';
 import { MagicScanReviewModal } from '../../components/features/MagicScanModal';
 import { financeApi } from '../../services/apiClient';
@@ -81,6 +81,7 @@ export default function HomeScreen() {
 
   const [isScanning, setIsScanning] = React.useState(false);
   const [scanResult, setScanResult] = React.useState<ScanResponse | null>(null);
+  const [scanError, setScanError] = React.useState<string | null>(null);
   const [scanModalVisible, setScanModalVisible] = React.useState(false);
   const [scanWindowVisible, setScanWindowVisible] = React.useState(false);
 
@@ -173,6 +174,7 @@ export default function HomeScreen() {
     setScanModalVisible(true);
     setIsScanning(true);
 
+    setScanError(null);
     try {
       let data: ScanResponse | null;
       if (mimeType === 'application/pdf' && user?.id) {
@@ -181,12 +183,34 @@ export default function HomeScreen() {
         // this device. See services/uploadService.ts.
         data = await parsePdfWithPasswordFlow(uri, user.id);
       } else {
-        data = await scanDocumentWithGemini(uri, mimeType, buildScanTaxonomy());
+        // Receipts/photos also route through the backend now (used to
+        // call Gemini directly from the client, which hung when the
+        // API key was missing in EAS profiles or the network stalled).
+        data = await parseImageViaBackend(uri, mimeType);
       }
       setScanResult(data);
-    } catch (err) {
+    } catch (err: any) {
       console.warn('[MagicScan] parse failed', err);
       setScanResult(null);
+      // Surface a useful diagnostic instead of a generic "failed" state.
+      // The most common live cases: backend image route not yet deployed
+      // (400 "Unsupported file type"), auth blip (401), network blip
+      // (timeout/no response), or Gemini transient 5xx.
+      const status = err?.response?.status;
+      const detail = err?.response?.data?.detail;
+      let msg: string;
+      if (!err?.response) {
+        msg = `Could not reach the backend. Check your connection or try again in a moment.`;
+      } else if (status === 401) {
+        msg = `Your session expired. Sign in again and retry.`;
+      } else if (status === 400 && typeof detail === 'string') {
+        msg = detail;
+      } else if (typeof detail === 'string') {
+        msg = detail;
+      } else {
+        msg = err?.message ?? 'Something went wrong on the server. Please try again.';
+      }
+      setScanError(msg);
     } finally {
       setIsScanning(false);
     }
@@ -613,6 +637,7 @@ export default function HomeScreen() {
         onClose={() => setScanModalVisible(false)}
         loading={isScanning}
         scanData={scanResult}
+        errorMessage={scanError}
         onConfirm={confirmScan}
         onEditTransaction={(index, patch) =>
           setScanResult(prev =>

@@ -16,7 +16,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { useCopilotStore, WidgetPayload, CopilotPersona } from '../../store/useCopilotStore';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { buildAdvisorGreeting } from '../../lib/copilotInsights';
-import { scanDocumentWithGemini, ScanResponse, ScannedTransaction, ScanTaxonomy } from '../../services/geminiService';
+import { ScanResponse, ScannedTransaction, ScanTaxonomy } from '../../services/geminiService';
+import { parseImageViaBackend } from '../../services/uploadService';
 import { useCategoriesStore } from '../../store/useCategoriesStore';
 import {
   chatWithCopilot,
@@ -101,6 +102,7 @@ export default function ChatCopilotScreen() {
 
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResponse | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
   const [scanModalVisible, setScanModalVisible] = useState(false);
 
   // Seed the advisor opener from the user's actual finance snapshot
@@ -309,21 +311,55 @@ export default function ChatCopilotScreen() {
   };
 
   const handleMagicScan = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0].uri) {
+    let result;
+    try {
+      result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.8,
+      });
+    } catch (err: any) {
+      Alert.alert('Could not open photo library', String(err?.message ?? err ?? '') || 'Please try again.');
+      return;
+    }
+    if (!result.canceled && result.assets[0]?.uri) {
       setScanModalVisible(true);
       setIsScanning(true);
-      const data = await scanDocumentWithGemini(
-        result.assets[0].uri,
-        'image/jpeg',
-        buildTaxonomy(),
-      );
-      setIsScanning(false);
-      setScanResult(data);
+      setScanError(null);
+      // Pass through the picker's reported MIME (iOS camera = HEIC,
+      // gallery = JPEG/PNG/HEIC). The backend File API rejects mime
+      // mismatches, and the previous hardcoded 'image/jpeg' was the
+      // root cause of the Magic Scan hang on production builds.
+      const asset = result.assets[0];
+      const mime =
+        asset.mimeType ??
+        (asset.uri.toLowerCase().endsWith('.png')
+          ? 'image/png'
+          : asset.uri.toLowerCase().endsWith('.heic')
+            ? 'image/heic'
+            : 'image/jpeg');
+      try {
+        const data = await parseImageViaBackend(asset.uri, mime);
+        setScanResult(data);
+      } catch (err: any) {
+        console.warn('[MagicScan] parse failed', err);
+        setScanResult(null);
+        const status = err?.response?.status;
+        const detail = err?.response?.data?.detail;
+        let msg: string;
+        if (!err?.response) {
+          msg = 'Could not reach the backend. Check your connection or try again in a moment.';
+        } else if (status === 401) {
+          msg = 'Your session expired. Sign in again and retry.';
+        } else if (typeof detail === 'string') {
+          msg = detail;
+        } else {
+          msg = err?.message ?? 'Something went wrong on the server. Please try again.';
+        }
+        setScanError(msg);
+      } finally {
+        setIsScanning(false);
+      }
     }
   };
 
@@ -539,6 +575,7 @@ export default function ChatCopilotScreen() {
         onClose={() => setScanModalVisible(false)}
         loading={isScanning}
         scanData={scanResult}
+        errorMessage={scanError}
         onConfirm={confirmScan}
         onEditTransaction={(index, patch) =>
           setScanResult(prev =>

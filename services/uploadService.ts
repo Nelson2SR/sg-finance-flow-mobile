@@ -1,20 +1,25 @@
 /**
- * Routes PDF scans through the backend's /upload/parse endpoint (PR-3).
+ * Routes uploads through the backend's /upload/parse endpoint.
  *
- * Why backend, not direct-to-Gemini? Because PDFs may be password-
- * protected and we need pikepdf (server-side) to decrypt them. The
+ * PDFs need backend round-tripping because they may be password-
+ * protected and we use pikepdf (server-side) to decrypt them. The
  * password ships in the multipart body, is used once in backend RAM,
  * and is NEVER persisted server-side (see api/routes/upload.py — no
- * credential_store writes; PR-4 drops the table entirely).
+ * credential_store writes).
  *
- * Receipts and photos still go to Gemini directly via
- * `services/geminiService.ts` — they're not encryptable.
+ * Receipts/images also flow through this same endpoint now (used to be
+ * direct-to-Gemini from the client). Reasons:
+ *   1. Direct client calls had no request timeout — the spinner could
+ *      hang indefinitely on a stalled Gemini connection.
+ *   2. EXPO_PUBLIC_GEMINI_API_KEY wasn't included in any EAS build
+ *      profile, so TestFlight builds silently failed.
+ *   3. Prompt versioning and error handling live in one place.
  *
  * Error contract: a 422 with `code === 'PDF_PASSWORD_REQUIRED'` means
  * the caller should prompt the user for the password and retry. A 422
  * with `code === 'PDF_PASSWORD_INCORRECT'` means the password sent was
  * wrong; the caller should clear the stored value (if any) and prompt
- * fresh.
+ * fresh. Image uploads never produce these codes.
  */
 
 import * as FileSystem from 'expo-file-system';
@@ -120,6 +125,64 @@ export async function readFileAsBase64(uri: string): Promise<string> {
   return FileSystem.readAsStringAsync(uri, {
     encoding: (FileSystem.EncodingType as any)?.Base64 || ('base64' as any),
   });
+}
+
+/**
+ * Upload a receipt image (or any photo of a transaction) for parsing.
+ * Routes through the same /upload/parse endpoint as PDFs — the backend
+ * branches on the multipart Content-Type and runs the receipt-shaped
+ * Gemini prompt. Returns the same ``ScanResponse`` shape so the Magic
+ * Scan review modal renders both sources identically.
+ *
+ * `mimeType` should be the picker's reported MIME (e.g. `image/heic`,
+ * `image/png`) — not a hardcoded `image/jpeg`. Callers that hardcode
+ * the MIME break the iOS Camera HEIC default and Gemini rejects the
+ * mismatched payload.
+ */
+export async function parseImageViaBackend(
+  uri: string,
+  mimeType: string,
+): Promise<ScanResponse> {
+  // Pick a sensible filename suffix from the mime so the backend's
+  // tempfile + Gemini File API both accept the upload. Without a
+  // matching suffix, Gemini's File API returns FAILED state.
+  const suffixByMime: Record<string, string> = {
+    'image/jpeg': '.jpg',
+    'image/jpg': '.jpg',
+    'image/png': '.png',
+    'image/webp': '.webp',
+    'image/heic': '.heic',
+    'image/heif': '.heif',
+  };
+  const suffix = suffixByMime[mimeType.toLowerCase()] ?? '.jpg';
+
+  const form = new FormData();
+  form.append('file', {
+    uri,
+    name: `receipt${suffix}`,
+    type: mimeType,
+  } as any);
+
+  const resp = await apiClient.post<ParseApiResponse>('/upload/parse', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    // Receipts are usually <500KB; 45s is generous but caps the
+    // "hang" failure mode that the direct-to-Gemini path had.
+    timeout: 45_000,
+  });
+
+  const data = resp.data;
+  return {
+    sourceType: 'RECEIPT',
+    transactions: data.transactions.map((t) => ({
+      merchant: t.description,
+      amount: Math.abs(Number(t.amount) || 0),
+      date: t.tx_date,
+      category: t.category,
+      type: t.direction === 'CREDIT' ? 'INCOME' : 'EXPENSE',
+      currency: t.currency,
+      labels: t.labels,
+    })),
+  };
 }
 
 import { Alert, Platform } from 'react-native';
