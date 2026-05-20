@@ -116,6 +116,20 @@ export async function updateProfile(
 }
 
 /**
+ * Permanently delete the signed-in user's account and all their data.
+ * Authenticated DELETE to `/me`. App Store Guideline 5.1.1(v) requires
+ * in-app account deletion. After this resolves, the caller MUST clear
+ * local tokens + state (AuthContext.logout) so the app returns to the
+ * login screen. `accessToken` is passed explicitly to match the rest
+ * of this module's signature style.
+ */
+export async function deleteAccount(accessToken: string): Promise<void> {
+  await axios.delete(`${BASE_URL}/me`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+/**
  * Exchange a refresh token for a new access+refresh pair. The old
  * refresh token is revoked atomically server-side, so replaying it
  * will return 401.

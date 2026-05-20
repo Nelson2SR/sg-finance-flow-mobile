@@ -172,9 +172,18 @@ export const MagicScanWindow = ({
               </Pressable>
             </View>
 
-            <Text className="font-jakarta text-text-mid mb-7 leading-relaxed text-sm">
+            <Text className="font-jakarta text-text-mid mb-2 leading-relaxed text-sm">
               Select your source. We support PDF e-statements and receipt photos.
             </Text>
+            {/* Inline AI disclosure (App Review 5.1.1(i)/5.1.2(i)) so
+                the data-sharing is visible at the point of use, not
+                just in the one-time consent sheet. */}
+            <View className="flex-row items-center gap-1.5 mb-7">
+              <Ionicons name="sparkles-outline" size={11} color={themeColors.textLow} />
+              <Text className="font-jakarta text-text-low text-[11px] flex-1">
+                Documents are read by Google Gemini AI to extract transactions.
+              </Text>
+            </View>
 
             <View className="gap-3">
               <Pressable

@@ -12,6 +12,7 @@ import {
   forgetBankPassword,
   listSavedBanks,
 } from '../lib/bankPasswords';
+import { hasAiConsent, revokeAiConsent } from '../lib/aiConsent';
 
 export default function PrivacyScreen() {
   const router = useRouter();
@@ -20,17 +21,41 @@ export default function PrivacyScreen() {
 
   const [banks, setBanks] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [aiConsent, setAiConsent] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const list = await listSavedBanks(user.id);
+      const [list, consent] = await Promise.all([
+        listSavedBanks(user.id),
+        hasAiConsent(user.id),
+      ]);
       setBanks(list);
+      setAiConsent(consent);
     } finally {
       setLoading(false);
     }
   }, [user?.id]);
+
+  const confirmRevokeAi = () => {
+    Alert.alert(
+      'Turn off AI features?',
+      'Magic Scan and the Copilot will stop sending your documents and messages to Google Gemini. We’ll ask for your permission again the next time you use them.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Turn off',
+          style: 'destructive',
+          onPress: async () => {
+            if (!user?.id) return;
+            await revokeAiConsent(user.id);
+            setAiConsent(false);
+          },
+        },
+      ],
+    );
+  };
 
   useEffect(() => {
     void refresh();
@@ -152,6 +177,47 @@ export default function PrivacyScreen() {
               </Text>
             </Pressable>
           )}
+
+          {/* ── AI data sharing ────────────────────────────────────────── */}
+          <Text className="font-jakarta-bold text-text-high text-xl mb-1">
+            AI Data Sharing
+          </Text>
+          <Text className="font-jakarta text-text-low text-xs mb-5 leading-relaxed">
+            Magic Scan and the Copilot use Google Gemini to read documents and answer
+            questions. We send the statement text / receipt images you scan, the
+            transactions extracted from them, and your Copilot messages (with a short
+            activity summary) to Google over an encrypted connection. Bank PDF passwords
+            are never sent to the AI. Google does not use this data to train its models
+            on our paid tier.
+          </Text>
+          <GradientCard padding="none" className="mb-4 overflow-hidden">
+            <View className="flex-row justify-between items-center p-5">
+              <View className="flex-row items-center gap-4 flex-1 pr-3">
+                <View
+                  className="w-9 h-9 rounded-2xl justify-center items-center"
+                  style={{ backgroundColor: 'rgba(255, 107, 74, 0.15)' }}>
+                  <Ionicons name="sparkles" size={16} color="#FF6B4A" />
+                </View>
+                <View className="flex-1">
+                  <Text className="font-jakarta-bold text-text-high text-sm">
+                    AI features
+                  </Text>
+                  <Text className="font-jakarta text-text-low text-[11px] mt-0.5">
+                    {aiConsent ? 'Enabled — sharing with Google Gemini' : 'Not enabled yet'}
+                  </Text>
+                </View>
+              </View>
+              {aiConsent && (
+                <Pressable
+                  onPress={confirmRevokeAi}
+                  className="px-4 py-2 rounded-full bg-surface-3 border border-hairline">
+                  <Text className="font-jakarta-bold text-accent-coral text-[11px] uppercase tracking-widest">
+                    Turn off
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          </GradientCard>
 
           {/* ── Privacy contract callout ───────────────────────────────── */}
           <View className="mb-12 px-1">

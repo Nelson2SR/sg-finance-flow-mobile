@@ -51,11 +51,13 @@ We use these third parties because we couldn't build them ourselves. They each s
 | Provider | What they see | Why |
 |---|---|---|
 | **Twilio** (Verify API) | Your phone number, the OTP code we asked them to send | Sending the one-time login code |
-| **Google Gemini** (LLM) | The **text** of your statement PDF (account number redacted), the categorisation prompt | AI extraction & categorisation of transactions |
+| **Google Gemini** (LLM) | The **text** of statement PDFs you scan (account number redacted), **receipt images** you scan, the transactions extracted from them, and your **Copilot chat messages** plus a short summary of your recent activity | AI extraction & categorisation of transactions; answering Copilot questions |
 | **Neon** (Postgres host) | Everything in §2.1 + §2.2 above | Database hosting |
 | **Apple** (iOS Keychain) | Your bank statement passwords | Local secure storage on your device |
 
-Google Gemini's data handling for paid API customers: input is **not used for model training**. Twilio retains OTP records for 30 days for audit; we cannot disable this on their side.
+**AI features are opt-in.** The first time you use Magic Scan or the Copilot, the app shows a consent screen that names Google Gemini, lists exactly what is sent, and asks your permission before anything is transmitted. Until you agree, no document, receipt, transaction, or message is sent to the AI. You can withdraw consent any time in **Settings → Privacy → AI Data Sharing**, after which the app stops sending data to Gemini and asks again the next time you use an AI feature.
+
+Google Gemini's data handling for paid API customers: input is **not used for model training**. Bank PDF passwords are decrypted on our backend in memory and are **never** sent to Gemini. Twilio retains OTP records for 30 days for audit; we cannot disable this on their side.
 
 ## 4. How we secure it
 

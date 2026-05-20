@@ -34,7 +34,7 @@ import { format } from 'date-fns';
 import { GradientCard, Surface } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
 import { useThemeColors } from '../hooks/use-theme-colors';
-import { updateProfile } from '../services/authService';
+import { deleteAccount, updateProfile } from '../services/authService';
 import {
   Gender,
   ProfileExtras,
@@ -53,10 +53,11 @@ const GENDER_OPTIONS: { value: Gender; label: string; icon: keyof typeof Ionicon
 export default function ProfileScreen() {
   const router = useRouter();
   const themeColors = useThemeColors();
-  const { user, accessToken, updateUser } = useAuth();
+  const { user, accessToken, updateUser, logout } = useAuth();
 
   const [extras, setExtras] = useState<ProfileExtras>({});
   const [extrasLoaded, setExtrasLoaded] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Display name draft mirrors the Settings tab's pattern — local
   // string that commits on blur, so editing feels instant.
@@ -169,6 +170,41 @@ export default function ProfileScreen() {
   const handlePickGender = (g: Gender) => {
     // Tapping the active chip again clears the selection.
     void persistExtras({ gender: extras.gender === g ? undefined : g });
+  };
+
+  const confirmDeleteAccount = () => {
+    Alert.alert(
+      'Delete account?',
+      'This permanently deletes your account and all of your data — transactions, wallets, categories, labels, and any vault groups you own (their other members will lose the shared vault). This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete account',
+          style: 'destructive',
+          onPress: async () => {
+            if (!accessToken) return;
+            setDeleting(true);
+            try {
+              await deleteAccount(accessToken);
+              // Drop all local tokens + cached stores and bounce to
+              // /login. logout() is best-effort server-side (the
+              // account is already gone) and always clears locally.
+              await logout({ allDevices: true });
+              router.replace('/login');
+            } catch (err: any) {
+              const detail = err?.response?.data?.detail;
+              Alert.alert(
+                'Could not delete account',
+                typeof detail === 'string'
+                  ? detail
+                  : 'Something went wrong. Please try again.',
+              );
+              setDeleting(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const avatarSource = useMemo(() => {
@@ -359,6 +395,30 @@ export default function ProfileScreen() {
               </View>
             </View>
           </GradientCard>
+
+          {/* ── Danger zone — account deletion (App Review 5.1.1(v)) ── */}
+          <Text className="font-jakarta-bold text-text-high text-xl mb-1">Danger Zone</Text>
+          <Text className="font-jakarta text-text-low text-xs mb-5 leading-relaxed">
+            Permanently delete your account and all associated data. This can't be undone.
+          </Text>
+          <Pressable
+            onPress={confirmDeleteAccount}
+            disabled={deleting}
+            className="flex-row items-center justify-center gap-2 py-4 rounded-2xl border mb-4"
+            style={{
+              borderColor: 'rgba(255, 92, 124, 0.5)',
+              backgroundColor: 'rgba(255, 92, 124, 0.08)',
+              opacity: deleting ? 0.5 : 1,
+            }}>
+            {deleting ? (
+              <ActivityIndicator size="small" color="#FF5C7C" />
+            ) : (
+              <Ionicons name="trash-outline" size={16} color="#FF5C7C" />
+            )}
+            <Text className="font-jakarta-bold text-[13px] uppercase tracking-widest" style={{ color: '#FF5C7C' }}>
+              {deleting ? 'Deleting…' : 'Delete account'}
+            </Text>
+          </Pressable>
 
         </ScrollView>
 

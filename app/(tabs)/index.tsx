@@ -17,12 +17,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 
 import { getProfileExtras } from '../../lib/profileExtras';
+import { hasAiConsent, grantAiConsent } from '../../lib/aiConsent';
 
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { TransactionAdderModal } from '../../components/features/TransactionAdderModal';
 import { CreateVaultModal } from '../../components/features/CreateVaultModal';
 import { TrendChart } from '../../components/features/TrendChart';
 import { MagicScanWindow, MagicScanPhase } from '../../components/features/MagicScanWindow';
+import { AiConsentModal } from '../../components/features/AiConsentModal';
 import { ScanResponse, ScannedTransaction, ScanTaxonomy } from '../../services/geminiService';
 import { parsePdfWithPasswordFlow, parseImageViaBackend } from '../../services/uploadService';
 import { useCategoriesStore } from '../../store/useCategoriesStore';
@@ -85,6 +87,10 @@ export default function HomeScreen() {
   const [magicScanPhase, setMagicScanPhase] = React.useState<MagicScanPhase>('closed');
   const [scanResult, setScanResult] = React.useState<ScanResponse | null>(null);
   const [scanError, setScanError] = React.useState<string | null>(null);
+  // AI consent gate — Magic Scan sends documents to Google Gemini, so
+  // the first invocation must clear an explicit consent prompt
+  // (App Review 5.1.1(i)/5.1.2(i)).
+  const [aiConsentVisible, setAiConsentVisible] = React.useState(false);
 
   // Pull the user's configured categories + labels so the Magic Scan
   // LLM tags new rows with their own vocabulary, not a hardcoded enum.
@@ -630,7 +636,16 @@ export default function HomeScreen() {
             size="lg"
             icon="flash-outline"
             block
-            onPress={() => setMagicScanPhase('picker')}
+            onPress={async () => {
+              // Gate Magic Scan behind AI consent. If already granted,
+              // go straight to the picker; otherwise show the consent
+              // sheet and open the picker only after the user agrees.
+              if (user?.id && !(await hasAiConsent(user.id))) {
+                setAiConsentVisible(true);
+                return;
+              }
+              setMagicScanPhase('picker');
+            }}
             style={{ flex: 1 }}>
             Magic Scan
           </NeonButton>
@@ -644,6 +659,15 @@ export default function HomeScreen() {
 
       <TransactionAdderModal visible={modalVisible} onClose={() => setModalVisible(false)} />
       <CreateVaultModal visible={vaultModalVisible} onClose={() => setVaultModalVisible(false)} />
+      <AiConsentModal
+        visible={aiConsentVisible}
+        onAgree={async () => {
+          setAiConsentVisible(false);
+          if (user?.id) await grantAiConsent(user.id);
+          setMagicScanPhase('picker');
+        }}
+        onDecline={() => setAiConsentVisible(false)}
+      />
       <MagicScanWindow
         phase={magicScanPhase}
         onSelectFile={handleSelectFile}
