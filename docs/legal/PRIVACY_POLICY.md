@@ -72,7 +72,7 @@ Google Gemini's data handling for paid API customers: input is **not used for mo
 You can, at any time:
 
 - **See your data** — email wowstorm99@gmail.com; we'll send a JSON export within 30 days.
-- **Delete your account** — Settings → Account → Sign out everywhere also schedules account deletion (transactions + identity link + auth tokens) within 7 days. To accelerate, email us.
+- **Delete your account** — in the app, go to **Profile → Danger Zone → Delete account**. This immediately and permanently deletes your account and all associated data: transactions, wallets, categories, labels, vault groups you own, identity link, and auth tokens. It cannot be undone. (You can also email us and we'll do it for you.)
 - **Correct data** — edit your display name in Settings; edit transactions in the Transactions tab; delete categorisation rules in Vault Config.
 - **Withdraw consent** — uninstall the app. To also delete the server-side copy, email us.
 
