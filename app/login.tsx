@@ -2,10 +2,14 @@ import React, { useState } from 'react';
 import {
   Alert,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   Text,
   TextInput,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -216,17 +220,36 @@ export default function LoginScreen() {
         : 'Sign in to your private vault.';
 
   // Web: constrain the form to a typical mobile-card width so the
-  // layout doesn't stretch full-window on desktop browsers. On native,
-  // these classes still resolve but the parent SafeAreaView is already
-  // <420px so they have no visible effect.
+  // layout doesn't stretch full-window on desktop browsers. On native
+  // the form is centred in a scroll view that grows to fill the screen.
   const innerContainerClass =
     Platform.OS === 'web'
-      ? 'flex-1 px-6 justify-center w-full max-w-md mx-auto'
-      : 'flex-1 px-6 justify-center';
+      ? 'px-6 w-full max-w-md mx-auto'
+      : 'px-6';
 
   return (
     <Surface halo>
-      <SafeAreaView className={innerContainerClass}>
+      {/* KeyboardAvoidingView + scrollable form so the phone-pad /
+          number-pad keyboard (which has no return key to dismiss)
+          never covers the Send code / Verify buttons. This was an
+          App Review Guideline 4 rejection on iPad — the keypad sat
+          over the button with no way to reach it. The ScrollView's
+          keyboardShouldPersistTaps="handled" also lets the button
+          fire on the FIRST tap while the keyboard is up (without it
+          the first tap only dismisses the keyboard). */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <SafeAreaView style={{ flex: 1 }}>
+          <TouchableWithoutFeedback
+            onPress={Keyboard.dismiss}
+            accessible={false}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
+              className={innerContainerClass}>
         <View className="items-center mb-10">
           {/* App icon — same image used as the iOS app icon, rendered
               so it visually matches what the user sees on the iOS
@@ -389,7 +412,10 @@ export default function LoginScreen() {
             </Pressable>
           </View>
         )}
-      </SafeAreaView>
+            </ScrollView>
+          </TouchableWithoutFeedback>
+        </SafeAreaView>
+      </KeyboardAvoidingView>
     </Surface>
   );
 }

@@ -16,9 +16,11 @@ import * as ImagePicker from 'expo-image-picker';
 import { useCopilotStore, WidgetPayload, CopilotPersona } from '../../store/useCopilotStore';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { buildAdvisorGreeting } from '../../lib/copilotInsights';
+import { hasAiConsent, grantAiConsent } from '../../lib/aiConsent';
 import { ScanResponse, ScannedTransaction, ScanTaxonomy } from '../../services/geminiService';
 import { parseImageViaBackend } from '../../services/uploadService';
 import { useCategoriesStore } from '../../store/useCategoriesStore';
+import { useAuth } from '../../context/AuthContext';
 import {
   chatWithCopilot,
   FinanceTaxonomy,
@@ -28,6 +30,7 @@ import {
 } from '../../services/copilotService';
 import { ToolCallCard } from '../../components/features/ToolCallCard';
 import { MagicScanReviewModal } from '../../components/features/MagicScanModal';
+import { AiConsentModal } from '../../components/features/AiConsentModal';
 import { Surface, SurfaceHeaderArea, GradientCard, ScreenHeader } from '../../components/ui';
 import { useThemeColors } from '../../hooks/use-theme-colors';
 
@@ -105,6 +108,25 @@ export default function ChatCopilotScreen() {
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanModalVisible, setScanModalVisible] = useState(false);
 
+  const { user } = useAuth();
+  // AI consent gate. Copilot messages + Magic Scan both send data to
+  // Google Gemini, so the first such action must clear an explicit
+  // consent prompt (App Review 5.1.1(i)/5.1.2(i)). `pendingAiAction`
+  // holds the action to run once the user agrees.
+  const [aiConsentVisible, setAiConsentVisible] = useState(false);
+  const pendingAiAction = useRef<(() => void) | null>(null);
+
+  // Run `action` if AI consent is already granted; otherwise stash it
+  // and show the consent sheet so it runs after the user agrees.
+  const withAiConsent = async (action: () => void): Promise<void> => {
+    if (user?.id && !(await hasAiConsent(user.id))) {
+      pendingAiAction.current = action;
+      setAiConsentVisible(true);
+      return;
+    }
+    action();
+  };
+
   // Seed the advisor opener from the user's actual finance snapshot
   // rather than a canned line. Runs whenever advisor is enabled and no
   // welcome bubble for them exists yet — fires once at first chat
@@ -156,6 +178,13 @@ export default function ChatCopilotScreen() {
   const handleSend = () => {
     if (!inputText.trim()) return;
     const userText = inputText;
+    // Gate behind AI consent — the message + an activity snapshot go
+    // to Google Gemini. The input text is only cleared inside doSend,
+    // so if the user declines the consent sheet their text is preserved.
+    void withAiConsent(() => doSend(userText));
+  };
+
+  const doSend = (userText: string) => {
     addMessage({ sender: 'user', text: userText });
     setInputText('');
 
@@ -199,13 +228,6 @@ export default function ChatCopilotScreen() {
     });
 
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
-  };
-
-  const handleVoice = () => {
-    Alert.alert(
-      'Voice Input',
-      'Voice capture is wired into the UI but the recorder lands in a follow-up. Press and hold here to speak once the recorder ships.',
-    );
   };
 
   // ── Tool-call lifecycle ────────────────────────────────────────────
@@ -310,7 +332,12 @@ export default function ChatCopilotScreen() {
     }
   };
 
-  const handleMagicScan = async () => {
+  const handleMagicScan = () => {
+    // Gate behind AI consent — the receipt image goes to Google Gemini.
+    void withAiConsent(runMagicScan);
+  };
+
+  const runMagicScan = async () => {
     let result;
     try {
       result = await ImagePicker.launchImageLibraryAsync({
@@ -531,6 +558,10 @@ export default function ChatCopilotScreen() {
               <Ionicons name="camera-outline" size={20} color="#FF6B4A" />
             </Pressable>
 
+            {/* Voice input was removed — the mic button only popped an
+                "coming soon" Alert, which App Review flagged as a bug
+                (Guideline 2.1a). Re-add a real recorder before bringing
+                the mic back. */}
             <View
               className={`flex-1 flex-row items-center bg-surface-2 rounded-full border ${
                 isFocused ? 'border-accent-coral' : 'border-hairline'
@@ -546,12 +577,6 @@ export default function ChatCopilotScreen() {
                 onSubmitEditing={handleSend}
                 returnKeyType="send"
               />
-              <Pressable
-                onPress={handleVoice}
-                className="w-10 h-10 justify-center items-center active:opacity-70"
-                hitSlop={6}>
-                <Ionicons name="mic-outline" size={20} color={themeColors.textMid} />
-              </Pressable>
             </View>
 
             <Pressable
@@ -569,6 +594,11 @@ export default function ChatCopilotScreen() {
               <Ionicons name="arrow-up" size={18} color="#fff" />
             </Pressable>
           </View>
+          {/* AI disclosure (App Review 5.1.1(i)/5.1.2(i)) — visible at
+              the point of use, in addition to the one-time consent sheet. */}
+          <Text className="font-jakarta text-text-low text-[10px] text-center mt-2">
+            Messages are processed by Google Gemini AI. See Settings → Privacy.
+          </Text>
         </View>
       </KeyboardAvoidingView>
 
@@ -591,6 +621,21 @@ export default function ChatCopilotScreen() {
               : prev,
           )
         }
+      />
+
+      <AiConsentModal
+        visible={aiConsentVisible}
+        onAgree={async () => {
+          setAiConsentVisible(false);
+          if (user?.id) await grantAiConsent(user.id);
+          const action = pendingAiAction.current;
+          pendingAiAction.current = null;
+          action?.();
+        }}
+        onDecline={() => {
+          setAiConsentVisible(false);
+          pendingAiAction.current = null;
+        }}
       />
     </Surface>
   );

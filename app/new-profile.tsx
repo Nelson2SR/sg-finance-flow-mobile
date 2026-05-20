@@ -1,5 +1,16 @@
 import React, { useState } from 'react';
-import { Alert, Platform, Pressable, Text, TextInput, View } from 'react-native';
+import {
+  Alert,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableWithoutFeedback,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -74,12 +85,24 @@ export default function NewProfileScreen() {
 
   const innerContainerClass =
     Platform.OS === 'web'
-      ? 'flex-1 px-6 justify-center w-full max-w-md mx-auto'
-      : 'flex-1 px-6 justify-center';
+      ? 'px-6 w-full max-w-md mx-auto'
+      : 'px-6';
 
   return (
     <Surface halo>
-      <SafeAreaView className={innerContainerClass}>
+      {/* Keyboard-safe scroll form — keeps the Continue button reachable
+          above the keyboard on iPad (App Review Guideline 4). */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <SafeAreaView style={{ flex: 1 }}>
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
+              className={innerContainerClass}>
         <View className="items-center mb-10">
           <View
             className="w-20 h-20 rounded-[24px] bg-accent-coral justify-center items-center mb-6"
@@ -143,7 +166,10 @@ export default function NewProfileScreen() {
             </Text>
           </Pressable>
         </View>
-      </SafeAreaView>
+            </ScrollView>
+          </TouchableWithoutFeedback>
+        </SafeAreaView>
+      </KeyboardAvoidingView>
     </Surface>
   );
 }
