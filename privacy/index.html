@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="index,follow" />
+  <title>Privacy Policy — VaultWise</title>
+  <meta name="description" content="VaultWise privacy policy: what data we collect, how we use it, who else sees it, and your choices." />
+  <style>
+    :root {
+      --coral: #FF6B4A;
+      --ink: #1A1A2E;
+      --muted: #5b6070;
+      --line: #ececf1;
+      --bg: #ffffff;
+      --soft: #fff5f1;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.65;
+      font-size: 16px;
+    }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 48px 24px 96px; }
+    header { border-bottom: 1px solid var(--line); padding-bottom: 24px; margin-bottom: 8px; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 10px;
+      font-weight: 700; font-size: 18px; color: var(--coral);
+    }
+    .dot {
+      width: 28px; height: 28px; border-radius: 9px;
+      background: var(--coral); color: #fff;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-weight: 800;
+    }
+    h1 { font-size: 30px; margin: 18px 0 6px; letter-spacing: -0.5px; }
+    h2 { font-size: 20px; margin: 40px 0 10px; letter-spacing: -0.2px; }
+    .meta { color: var(--muted); font-size: 14px; margin: 2px 0; }
+    .lede {
+      background: var(--soft); border: 1px solid #ffd9cc;
+      border-radius: 14px; padding: 16px 18px; margin: 24px 0 8px;
+      color: #7a3a26; font-size: 15px;
+    }
+    p, li { color: #2a2d3a; }
+    a { color: var(--coral); }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14.5px; }
+    th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+    th { background: #fafafb; font-weight: 700; }
+    code { background: #f4f4f7; padding: 1px 6px; border-radius: 6px; font-size: 13px; }
+    .callout { background: #fafafb; border: 1px solid var(--line); border-radius: 14px; padding: 14px 18px; }
+    footer { margin-top: 56px; padding-top: 24px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+    strong { color: var(--ink); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="badge"><span class="dot">$</span> VaultWise</div>
+      <h1>Privacy Policy</h1>
+      <p class="meta"><strong>Effective date:</strong> 2026-05-21</p>
+      <p class="meta"><strong>App:</strong> VaultWise (iOS · App Store)</p>
+      <p class="meta"><strong>Operator:</strong> Su Rong (individual developer, Singapore)</p>
+      <p class="meta"><strong>Contact:</strong> <a href="mailto:wowstorm99@gmail.com">wowstorm99@gmail.com</a></p>
+    </header>
+
+    <p class="lede">This document explains what data VaultWise collects, how we use it, who else sees it, and the choices you have. Plain language — short, specific. If anything reads as fuzzy, email us; we'll fix it.</p>
+
+    <h2>1. What we are</h2>
+    <p>VaultWise is a personal finance tracker. You import bank statements you already have, the app categorises them, and you see your spending trends. We are <strong>not</strong> a financial institution. We do not move money. We do not connect to bank APIs. We do not give investment advice.</p>
+
+    <h2>2. What we collect</h2>
+    <h3>2.1 You give us this data</h3>
+    <table>
+      <thead><tr><th>Data</th><th>Where it lives</th><th>Why we need it</th></tr></thead>
+      <tbody>
+        <tr><td>Phone number (E.164)</td><td>Our backend (<code>identity_links</code>, Neon Postgres)</td><td>Authenticating you. We never display it; we hash it for analytics.</td></tr>
+        <tr><td>Display name (optional)</td><td>Backend (<code>users</code> table)</td><td>What the app shows on your profile</td></tr>
+        <tr><td>Bank statements (PDFs)</td><td><strong>Parsed in memory; the PDF itself is never stored on our servers</strong></td><td>To extract transactions. The decrypted PDF lives only for one parse request.</td></tr>
+        <tr><td>Bank statement passwords</td><td><strong>Your device's iOS Keychain only</strong> — never our servers, never logged</td><td>So you don't re-enter them every import</td></tr>
+        <tr><td>Transactions (date, amount, merchant, category)</td><td>Backend (<code>transactions</code> table)</td><td>The product itself</td></tr>
+        <tr><td>Categorisation rules you create</td><td>Backend (<code>categorisation_rules</code>)</td><td>So your rules survive a reinstall</td></tr>
+      </tbody>
+    </table>
+
+    <h3>2.2 What we automatically collect</h3>
+    <table>
+      <thead><tr><th>Data</th><th>Why</th><th>Retention</th></tr></thead>
+      <tbody>
+        <tr><td>Access/refresh tokens (issued by us)</td><td>Keep you signed in</td><td>30 days for refresh; rotated on every use</td></tr>
+        <tr><td>Source IP — hashed (HMAC-SHA256)</td><td>Refresh-token forensics if a token is stolen</td><td>Lives with the refresh-token row</td></tr>
+        <tr><td>User-Agent string</td><td>Same as above</td><td>Same</td></tr>
+        <tr><td>Crash logs (no PII)</td><td>Fix bugs</td><td>90 days</td></tr>
+      </tbody>
+    </table>
+
+    <h3>2.3 What we <em>don't</em> collect</h3>
+    <ul>
+      <li>We don't read your contacts.</li>
+      <li>We don't track you across other apps. No IDFA. No third-party advertising SDKs.</li>
+      <li>We don't sell anything to anyone.</li>
+    </ul>
+
+    <h2>3. Who else sees your data</h2>
+    <p>We use these third parties because we couldn't build them ourselves. They each see only the slice they need.</p>
+    <table>
+      <thead><tr><th>Provider</th><th>What they see</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Twilio</strong> (Verify API)</td><td>Your phone number, the OTP code we asked them to send</td><td>Sending the one-time login code</td></tr>
+        <tr><td><strong>Google Gemini</strong> (LLM)</td><td>The text of statement PDFs you scan (account number redacted), receipt images you scan, the transactions extracted from them, and your Copilot chat messages plus a short summary of your recent activity</td><td>AI extraction &amp; categorisation; answering Copilot questions</td></tr>
+        <tr><td><strong>Neon</strong> (Postgres host)</td><td>Everything in §2.1 + §2.2 above</td><td>Database hosting</td></tr>
+        <tr><td><strong>Apple</strong> (iOS Keychain)</td><td>Your bank statement passwords</td><td>Local secure storage on your device</td></tr>
+      </tbody>
+    </table>
+    <p class="callout"><strong>AI features are opt-in.</strong> The first time you use Magic Scan or the Copilot, the app shows a consent screen that names Google Gemini, lists exactly what is sent, and asks your permission before anything is transmitted. Until you agree, no document, receipt, transaction, or message is sent to the AI. You can withdraw consent any time in <strong>Settings → Privacy → AI Data Sharing</strong>, after which the app stops sending data to Gemini and asks again the next time you use an AI feature.</p>
+    <p>Google Gemini's data handling for paid API customers: input is <strong>not used for model training</strong>. Bank PDF passwords are decrypted on our backend in memory and are <strong>never</strong> sent to Gemini. Twilio retains OTP records for 30 days for audit; we cannot disable this on their side.</p>
+
+    <h2>4. How we secure it</h2>
+    <ul>
+      <li>Transport: TLS 1.3 everywhere. No plaintext over the wire.</li>
+      <li>At rest: bank-statement passwords are stored only in the iOS Keychain on your device, protected by Face ID / Touch ID / passcode. We never see them.</li>
+      <li>Database: Neon Postgres with at-rest encryption. Backups encrypted.</li>
+      <li>Tokens: refresh tokens are SHA-256 hashed before storage; we cannot reconstruct the plaintext if our database is breached.</li>
+      <li>IP addresses are HMAC-SHA256 hashed under a server-side key — not reversible by rainbow table.</li>
+    </ul>
+
+    <h2>5. Your rights</h2>
+    <p>You can, at any time:</p>
+    <ul>
+      <li><strong>See your data</strong> — email <a href="mailto:wowstorm99@gmail.com">wowstorm99@gmail.com</a>; we'll send a JSON export within 30 days.</li>
+      <li><strong>Delete your account</strong> — in the app, go to <strong>Profile → Danger Zone → Delete account</strong>. This immediately and permanently deletes your account and all associated data: transactions, wallets, categories, labels, vault groups you own, identity link, and auth tokens. It cannot be undone. (You can also email us and we'll do it for you.)</li>
+      <li><strong>Correct data</strong> — edit your display name in Settings; edit transactions in the Transactions tab; delete categorisation rules in Vault Config.</li>
+      <li><strong>Withdraw consent</strong> — uninstall the app. To also delete the server-side copy, use account deletion above or email us.</li>
+    </ul>
+    <p>We respect GDPR (if you're in the EU/EEA) and PDPA (Singapore). Singapore residents can contact the Personal Data Protection Commission if they're unhappy with our response: <a href="https://www.pdpc.gov.sg/">pdpc.gov.sg</a>.</p>
+
+    <h2>6. Children</h2>
+    <p>VaultWise is not directed at children under 13. We don't knowingly collect data from anyone under 13. If you believe a child has used the app, email us and we'll delete the account.</p>
+
+    <h2>7. Changes</h2>
+    <p>If we materially change how we handle your data, we will notify you in the app at least 14 days before the change takes effect. The "Effective date" at the top of this page always reflects the current version.</p>
+
+    <h2>8. Contact</h2>
+    <ul>
+      <li><strong>Email:</strong> <a href="mailto:wowstorm99@gmail.com">wowstorm99@gmail.com</a></li>
+      <li><strong>Postal:</strong> 12A Hougang Street 11, Singapore 534074</li>
+      <li><strong>Data Protection Officer:</strong> Su Rong (sole owner / operator)</li>
+    </ul>
+
+    <footer>© 2026 VaultWise · Su Rong, Singapore</footer>
+  </div>
+</body>
+</html>
