@@ -43,6 +43,19 @@ export const API_CONFIG = {
   BASE_URL: resolveApiBaseUrl(),
 };
 
+// ── AI provider identity ─────────────────────────────────────────────────
+// The third-party LLM provider that AI features (Magic Scan, Copilot)
+// send data to. App Review Guideline 5.1.1(i) requires the consent
+// disclosure to NAME the recipient, so this stays a real provider name —
+// but it's centralised here so migrating providers is a one-line change
+// instead of a copy hunt across the consent sheet + disclosures.
+//   • AI_PROVIDER_NAME — full product name shown in the consent sheet
+//     and privacy screen (e.g. "Google Gemini", "Anthropic Claude").
+//   • AI_PROVIDER_SHORT — the operating company, used in shorter
+//     in-context lines (e.g. "Google", "Anthropic", "OpenAI").
+export const AI_PROVIDER_NAME = 'Google Gemini';
+export const AI_PROVIDER_SHORT = 'Google';
+
 // Skip the entire login flow in dev. When true, AuthContext synthesises
 // a fake session so reloads land straight on /(tabs). The backend will
 // reject the dev token with 401, so any endpoint that depends on a real

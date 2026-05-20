@@ -13,6 +13,7 @@ import {
   listSavedBanks,
 } from '../lib/bankPasswords';
 import { hasAiConsent, revokeAiConsent } from '../lib/aiConsent';
+import { AI_PROVIDER_NAME, AI_PROVIDER_SHORT } from '../constants/Config';
 
 export default function PrivacyScreen() {
   const router = useRouter();
@@ -41,7 +42,7 @@ export default function PrivacyScreen() {
   const confirmRevokeAi = () => {
     Alert.alert(
       'Turn off AI features?',
-      'Magic Scan and the Copilot will stop sending your documents and messages to Google Gemini. We’ll ask for your permission again the next time you use them.',
+      `Magic Scan and the Copilot will stop sending your documents and messages to ${AI_PROVIDER_NAME}. We’ll ask for your permission again the next time you use them.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -183,12 +184,12 @@ export default function PrivacyScreen() {
             AI Data Sharing
           </Text>
           <Text className="font-jakarta text-text-low text-xs mb-5 leading-relaxed">
-            Magic Scan and the Copilot use Google Gemini to read documents and answer
+            Magic Scan and the Copilot use {AI_PROVIDER_NAME} to read documents and answer
             questions. We send the statement text / receipt images you scan, the
             transactions extracted from them, and your Copilot messages (with a short
-            activity summary) to Google over an encrypted connection. Bank PDF passwords
-            are never sent to the AI. Google does not use this data to train its models
-            on our paid tier.
+            activity summary) to {AI_PROVIDER_SHORT} over an encrypted connection. Bank PDF
+            passwords are never sent to the AI. We only work with AI providers that don't
+            use your data to train their models.
           </Text>
           <GradientCard padding="none" className="mb-4 overflow-hidden">
             <View className="flex-row justify-between items-center p-5">
@@ -203,7 +204,7 @@ export default function PrivacyScreen() {
                     AI features
                   </Text>
                   <Text className="font-jakarta text-text-low text-[11px] mt-0.5">
-                    {aiConsent ? 'Enabled — sharing with Google Gemini' : 'Not enabled yet'}
+                    {aiConsent ? `Enabled — sharing with ${AI_PROVIDER_NAME}` : 'Not enabled yet'}
                   </Text>
                 </View>
               </View>

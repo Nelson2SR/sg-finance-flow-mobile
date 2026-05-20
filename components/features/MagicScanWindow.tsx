@@ -26,6 +26,7 @@ import { BlurView } from 'expo-blur';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
+import { AI_PROVIDER_NAME } from '../../constants/Config';
 import { useThemeColors } from '../../hooks/use-theme-colors';
 import {
   MagicScanReviewBody,
@@ -181,7 +182,7 @@ export const MagicScanWindow = ({
             <View className="flex-row items-center gap-1.5 mb-7">
               <Ionicons name="sparkles-outline" size={11} color={themeColors.textLow} />
               <Text className="font-jakarta text-text-low text-[11px] flex-1">
-                Documents are read by Google Gemini AI to extract transactions.
+                Documents are read by {AI_PROVIDER_NAME} to extract transactions.
               </Text>
             </View>
 

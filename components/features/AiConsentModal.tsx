@@ -2,10 +2,11 @@
  * AI data-sharing consent sheet.
  *
  * Shown the first time a user invokes an AI feature (Magic Scan or
- * Copilot). Discloses exactly what data is sent and to whom (Google
- * Gemini), per App Review Guideline 5.1.1(i) / 5.1.2(i). The parent
- * persists the grant via lib/aiConsent on "Agree"; "Not now" cancels
- * the pending action without sending anything.
+ * Copilot). Discloses exactly what data is sent and to whom, per App
+ * Review Guideline 5.1.1(i) / 5.1.2(i). The recipient is named via the
+ * AI_PROVIDER_* constants so swapping LLM providers is a one-line edit.
+ * The parent persists the grant via lib/aiConsent on "Agree"; "Not now"
+ * cancels the pending action without sending anything.
  */
 
 import React from 'react';
@@ -13,6 +14,7 @@ import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 
+import { AI_PROVIDER_NAME, AI_PROVIDER_SHORT } from '../../constants/Config';
 import { useThemeColors } from '../../hooks/use-theme-colors';
 
 interface AiConsentModalProps {
@@ -65,9 +67,10 @@ export const AiConsentModal = ({ visible, onAgree, onDecline }: AiConsentModalPr
           <ScrollView showsVerticalScrollIndicator={false} style={{ flexShrink: 1 }}>
             <Text className="font-jakarta text-text-mid text-sm leading-relaxed text-center mb-6">
               Magic Scan and the Copilot use{' '}
-              <Text className="font-jakarta-bold text-text-high">Google Gemini</Text>, a
+              <Text className="font-jakarta-bold text-text-high">{AI_PROVIDER_NAME}</Text>, a
               third-party AI service, to read documents and answer questions. With your
-              permission, we send the following to Google over an encrypted connection:
+              permission, we send the following to {AI_PROVIDER_SHORT} over an encrypted
+              connection:
             </Text>
 
             <View className="gap-3 mb-6">
@@ -89,10 +92,10 @@ export const AiConsentModal = ({ visible, onAgree, onDecline }: AiConsentModalPr
               className="rounded-2xl p-4 mb-2"
               style={{ backgroundColor: themeColors.surface2, borderWidth: 1, borderColor: themeColors.hairline }}>
               <Text className="font-jakarta text-text-low text-[12px] leading-relaxed">
-                Google does not use this data to train its models on our paid API tier. We
-                never sell your data. Bank PDF passwords stay on your device and are never
-                sent to the AI. You can review the full details any time in our Privacy
-                Policy, and revoke this in Settings.
+                We only work with AI providers that don't use your data to train their
+                models. We never sell your data. Bank PDF passwords stay on your device and
+                are never sent to the AI. You can review the full details any time in our
+                Privacy Policy, and revoke this in Settings.
               </Text>
             </View>
           </ScrollView>
