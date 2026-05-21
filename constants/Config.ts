@@ -56,6 +56,13 @@ export const API_CONFIG = {
 export const AI_PROVIDER_NAME = 'Google Gemini';
 export const AI_PROVIDER_SHORT = 'Google';
 
+// Public legal pages (hosted on GitHub Pages). Surfaced as tappable
+// links on the login screen and in the AI consent sheet so the policy
+// is always reachable in-app — an App Review expectation, and required
+// before we send any data to the AI provider.
+export const PRIVACY_POLICY_URL =
+  'https://nelson2sr.github.io/sg-finance-flow-mobile/privacy/';
+
 // Skip the entire login flow in dev. When true, AuthContext synthesises
 // a fake session so reloads land straight on /(tabs). The backend will
 // reject the dev token with 401, so any endpoint that depends on a real

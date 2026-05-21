@@ -1,8 +1,8 @@
 # Privacy Policy — VaultWise
 
-**Effective date:** 2026-05-16
+**Effective date:** 2026-05-21
 **App:** VaultWise (iOS · App Store)
-**Operator:** Su Rong (individual developer, Singapore)
+**Operator:** VaultWise (independent app developer, Singapore)
 **Contact:** wowstorm99@gmail.com
 
 > This document explains what data VaultWise collects, how we use
@@ -89,5 +89,6 @@ If we materially change how we handle your data, we will notify you in the app a
 ## 8. Contact
 
 - **Email:** wowstorm99@gmail.com
-- **Postal:** 12A Hougang Street 11, Singapore 534074
-- **Data Protection Officer:** Su Rong (sole owner / operator)
+- **Operator:** VaultWise (independent app developer based in Singapore)
+
+For any privacy request — data export, correction, or deletion — email us and we'll respond within 30 days.

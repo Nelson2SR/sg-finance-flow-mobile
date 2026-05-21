@@ -10,11 +10,11 @@
  */
 
 import React from 'react';
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { Linking, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 
-import { AI_PROVIDER_NAME, AI_PROVIDER_SHORT } from '../../constants/Config';
+import { AI_PROVIDER_NAME, AI_PROVIDER_SHORT, PRIVACY_POLICY_URL } from '../../constants/Config';
 import { useThemeColors } from '../../hooks/use-theme-colors';
 
 interface AiConsentModalProps {
@@ -94,8 +94,13 @@ export const AiConsentModal = ({ visible, onAgree, onDecline }: AiConsentModalPr
               <Text className="font-jakarta text-text-low text-[12px] leading-relaxed">
                 We only work with AI providers that don't use your data to train their
                 models. We never sell your data. Bank PDF passwords stay on your device and
-                are never sent to the AI. You can review the full details any time in our
-                Privacy Policy, and revoke this in Settings.
+                are never sent to the AI. You can review the full details any time in our{' '}
+                <Text
+                  className="font-jakarta-bold text-accent-coral"
+                  onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}>
+                  Privacy Policy
+                </Text>
+                , and revoke this in Settings.
               </Text>
             </View>
           </ScrollView>
