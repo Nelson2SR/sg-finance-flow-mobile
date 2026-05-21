@@ -100,7 +100,7 @@ export const AiConsentModal = ({ visible, onAgree, onDecline }: AiConsentModalPr
                   onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}>
                   Privacy Policy
                 </Text>
-                , and revoke this in Settings.
+                , and revoke this any time in Profile → Privacy.
               </Text>
             </View>
           </ScrollView>

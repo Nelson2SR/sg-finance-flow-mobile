@@ -598,7 +598,7 @@ export default function ChatCopilotScreen() {
           {/* AI disclosure (App Review 5.1.1(i)/5.1.2(i)) — visible at
               the point of use, in addition to the one-time consent sheet. */}
           <Text className="font-jakarta text-text-low text-[10px] text-center mt-2">
-            Messages are processed by {AI_PROVIDER_NAME}. See Settings → Privacy.
+            Messages are processed by {AI_PROVIDER_NAME}. See Profile → Privacy.
           </Text>
         </View>
       </KeyboardAvoidingView>

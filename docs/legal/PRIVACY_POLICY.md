@@ -55,7 +55,7 @@ We use these third parties because we couldn't build them ourselves. They each s
 | **Neon** (Postgres host) | Everything in §2.1 + §2.2 above | Database hosting |
 | **Apple** (iOS Keychain) | Your bank statement passwords | Local secure storage on your device |
 
-**AI features are opt-in.** The first time you use Magic Scan or the Copilot, the app shows a consent screen that names Google Gemini, lists exactly what is sent, and asks your permission before anything is transmitted. Until you agree, no document, receipt, transaction, or message is sent to the AI. You can withdraw consent any time in **Settings → Privacy → AI Data Sharing**, after which the app stops sending data to Gemini and asks again the next time you use an AI feature.
+**AI features are opt-in.** The first time you use Magic Scan or the Copilot, the app shows a consent screen that names Google Gemini, lists exactly what is sent, and asks your permission before anything is transmitted. Until you agree, no document, receipt, transaction, or message is sent to the AI. You can withdraw consent any time in **Profile → Privacy → AI Data Sharing**, after which the app stops sending data to Gemini and asks again the next time you use an AI feature.
 
 Google Gemini's data handling for paid API customers: input is **not used for model training**. Bank PDF passwords are decrypted on our backend in memory and are **never** sent to Gemini. Twilio retains OTP records for 30 days for audit; we cannot disable this on their side.
 
@@ -73,7 +73,7 @@ You can, at any time:
 
 - **See your data** — email wowstorm99@gmail.com; we'll send a JSON export within 30 days.
 - **Delete your account** — in the app, go to **Profile → Danger Zone → Delete account**. This immediately and permanently deletes your account and all associated data: transactions, wallets, categories, labels, vault groups you own, identity link, and auth tokens. It cannot be undone. (You can also email us and we'll do it for you.)
-- **Correct data** — edit your display name in Settings; edit transactions in the Transactions tab; delete categorisation rules in Vault Config.
+- **Correct data** — edit your display name in Profile; edit transactions in the Transactions tab; delete categorisation rules in Vault Config.
 - **Withdraw consent** — uninstall the app. To also delete the server-side copy, email us.
 
 We respect GDPR (if you're in the EU/EEA) and PDPA (Singapore). Singapore residents can contact the Personal Data Protection Commission if they're unhappy with our response: [pdpc.gov.sg](https://www.pdpc.gov.sg/).
