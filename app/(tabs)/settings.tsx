@@ -230,12 +230,14 @@ export default function SettingsScreen() {
         </GradientCard>
 
         {/* ── Privacy ──────────────────────────────────────────────────
-            Manage on-device bank PDF passwords — see PRD 09 §4.4 / the
-            Zero Cloud Lock-in commitment in CLAUDE.md. */}
+            The /privacy screen covers two topics: on-device bank PDF
+            passwords (PRD 09 §4.4 / Zero Cloud Lock-in) AND AI data
+            sharing (consent + revoke). The entry row is labelled
+            broadly so it doesn't read as bank-passwords-only. */}
         <Text className="font-jakarta-bold text-text-high text-xl mb-1">Privacy</Text>
         <Text className="font-jakarta text-text-low text-xs mb-5 leading-relaxed">
-          Bank PDF passwords are kept in your iOS Keychain on this device. We never
-          store them on our servers.
+          Control AI data sharing and your on-device bank PDF passwords. Passwords stay
+          in your iOS Keychain — we never store them on our servers.
         </Text>
         <GradientCard padding="none" className="mb-8 overflow-hidden">
           <Pressable
@@ -248,7 +250,7 @@ export default function SettingsScreen() {
                 <Ionicons name="lock-closed" size={14} color="#A78BFA" />
               </View>
               <Text className="font-jakarta-bold text-text-high text-sm">
-                Bank passwords
+                Privacy &amp; Data
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={14} color={themeColors.textLow} />
