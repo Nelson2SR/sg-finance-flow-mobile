@@ -23,6 +23,7 @@ import {
   DEV_PHONE_OTP_BYPASS,
   DEV_PHONE_OTP_CODE,
   PRIVACY_POLICY_URL,
+  TERMS_OF_SERVICE_URL,
 } from '../constants/Config';
 import { useAuth } from '../context/AuthContext';
 import { useThemeColors } from '../hooks/use-theme-colors';
@@ -401,13 +402,20 @@ export default function LoginScreen() {
           )}
         </GradientCard>
 
-        {/* Privacy disclosure — signing in / creating an account sends
+        {/* Legal disclosure — signing in / creating an account sends
             data to our backend (and, with consent, to the AI provider),
-            so the policy must be reachable from login. Inline link, no
-            checkbox: the standard low-friction pattern for OTP apps. */}
+            so the Terms + Privacy Policy must be reachable from login.
+            Inline links, no checkbox: the standard low-friction pattern
+            for OTP apps. */}
         <View className="mt-6 px-4">
           <Text className="font-jakarta text-text-dim text-[11px] text-center leading-relaxed">
             By continuing, you agree to our{' '}
+            <Text
+              className="font-jakarta-bold text-accent-coral"
+              onPress={() => Linking.openURL(TERMS_OF_SERVICE_URL)}>
+              Terms of Service
+            </Text>{' '}
+            and{' '}
             <Text
               className="font-jakarta-bold text-accent-coral"
               onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}>

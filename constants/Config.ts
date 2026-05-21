@@ -62,6 +62,8 @@ export const AI_PROVIDER_SHORT = 'Google';
 // before we send any data to the AI provider.
 export const PRIVACY_POLICY_URL =
   'https://nelson2sr.github.io/sg-finance-flow-mobile/privacy/';
+export const TERMS_OF_SERVICE_URL =
+  'https://nelson2sr.github.io/sg-finance-flow-mobile/terms/';
 
 // Skip the entire login flow in dev. When true, AuthContext synthesises
 // a fake session so reloads land straight on /(tabs). The backend will

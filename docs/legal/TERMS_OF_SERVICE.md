@@ -1,8 +1,8 @@
 # Terms of Service — VaultWise
 
-**Effective date:** 2026-05-16
+**Effective date:** 2026-05-21
 **App:** VaultWise (iOS · App Store)
-**Operator:** Su Rong (individual developer, Singapore)
+**Operator:** VaultWise (independent app developer, Singapore)
 
 > These are the rules for using VaultWise. We've kept them short. Read them.
 
@@ -75,4 +75,4 @@ We'll update these Terms over time. The "Effective date" at the top reflects the
 ## 11. Contact
 
 - **Email:** wowstorm99@gmail.com
-- **Postal:** 12A Hougang Street 11, Singapore 534074
+- **Operator:** VaultWise (independent app developer based in Singapore)
