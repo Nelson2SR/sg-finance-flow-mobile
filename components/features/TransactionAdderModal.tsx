@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, Pressable, Modal, ScrollView, Platform } from 'react-native';
+import { View, Text, Pressable, Modal, ScrollView, TextInput, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -29,6 +29,11 @@ export function TransactionAdderModal({ visible, onClose }: Props) {
   const [categoryId, setCategoryId] = useState<string | null>(null);
   // Multi-select label IDs — 0..N per transaction.
   const [labelIds, setLabelIds] = useState<string[]>([]);
+  // Optional human label for the entry (shown as merchant on Activity).
+  // Blank → defaults to "MANUAL ENTRY" at save time so the row never
+  // renders without a title.
+  const [name, setName] = useState('');
+  const DEFAULT_ENTRY_NAME = 'MANUAL ENTRY';
 
   const addTransaction = useFinanceStore(s => s.addTransaction);
   const activeWalletId = useFinanceStore(s => s.activeWalletId);
@@ -48,6 +53,7 @@ export function TransactionAdderModal({ visible, onClose }: Props) {
     if (visible) {
       setWalletId(activeWalletId);
       setDate(new Date());
+      setName('');
     }
   }, [visible, activeWalletId]);
 
@@ -103,13 +109,16 @@ export function TransactionAdderModal({ visible, onClose }: Props) {
       type,
       amount: num,
       category: categoryName,
-      merchant: 'Manual Entry',
+      // Blank → DEFAULT_ENTRY_NAME so the Activity row always has a
+      // title. User-typed names are saved verbatim (trimmed).
+      merchant: name.trim() || DEFAULT_ENTRY_NAME,
       date,
       labels: labelNames.length > 0 ? labelNames : undefined,
     });
     onClose();
     setAmount('0');
     setLabelIds([]);
+    setName('');
     // categoryId is auto-reseeded on next open via the useEffect above.
 
     // Hop to the Activity tab with filters pre-set to the new entry's
@@ -129,8 +138,21 @@ export function TransactionAdderModal({ visible, onClose }: Props) {
   const rowClass = 'flex-row justify-between items-center bg-surface-2 p-4 rounded-2xl border border-hairline';
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="formSheet">
+    // pageSheet (not formSheet): on iPad, formSheet is a small
+    // centered card (~620pt) — too short for the amount + 5 form rows
+    // + keypad. pageSheet covers ~85% of the iPad screen with the same
+    // rounded card look, so the wallet row fits without scrolling. On
+    // iPhone the two are visually identical.
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
       <SafeAreaView className="flex-1 bg-surface-0">
+        {/* Centered column — caps width on iPad / web so the keypad's
+            fixed-size buttons stay grouped instead of spreading across
+            a 540pt-wide formSheet (Apple Guideline 4 rejection on iPad
+            Air 11"). On iPhone the screen is narrower than the cap so
+            this is a no-op. */}
+        <View
+          className="flex-1 w-full self-center"
+          style={{ maxWidth: 480 }}>
         {/* Header */}
         <View className="flex-row justify-between items-center px-6 pt-4 pb-2">
           <Pressable
@@ -156,8 +178,11 @@ export function TransactionAdderModal({ visible, onClose }: Props) {
           </View>
         </View>
 
-        {/* Display Amount */}
-        <View className="items-center justify-center mt-10 mb-8">
+        {/* Display Amount — tightened vertical rhythm so the form
+            section below has room on short sheets (iPad formSheet is
+            considerably shorter than a full iPhone screen, especially
+            under iPadOS 26's resizable sheet sizing). */}
+        <View className="items-center justify-center mt-4 mb-3">
           <Text
             className="font-jakarta-light tracking-tighter text-6xl"
             style={{ color: isExpense ? '#FF5C7C' : '#5BE0B0' }}>
@@ -167,8 +192,39 @@ export function TransactionAdderModal({ visible, onClose }: Props) {
 
         {/* Input form fields — categories + labels are sourced from
             Settings → Vault Config so the user's own taxonomy drives
-            the manual-entry flow, not a hardcoded enum. */}
-        <View className="px-6 flex-1 gap-4">
+            the manual-entry flow, not a hardcoded enum.
+
+            Must be a ScrollView (not a plain flex-1 View): on iPad the
+            modal renders as a formSheet, and between the amount block
+            and the keypad footer there isn't always enough room for
+            all four rows — without scrolling, the date / wallet rows
+            slip behind the keypad's rounded header. The App Review
+            rejection on iPad Air 11" was exactly this clipping. */}
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{ paddingHorizontal: 24, gap: 16, paddingBottom: 12 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
+          {/* Entry name (optional). Defaults to "MANUAL ENTRY" at save
+              time if left blank — keeps Activity rows from showing an
+              empty merchant column. */}
+          <View>
+            <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-2 px-1">
+              Entry name
+            </Text>
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder={DEFAULT_ENTRY_NAME}
+              placeholderTextColor={themeColors.textDim}
+              maxLength={64}
+              autoCapitalize="words"
+              autoCorrect={false}
+              returnKeyType="done"
+              className="bg-surface-2 px-4 py-3 rounded-2xl text-text-high font-jakarta text-sm border border-hairline"
+            />
+          </View>
+
           {/* Category picker — horizontal scroll, icon + name, tinted
               with the category's configured color. */}
           <View>
@@ -290,7 +346,7 @@ export function TransactionAdderModal({ visible, onClose }: Props) {
             </View>
             <Ionicons name="chevron-forward" size={16} color={themeColors.textLow} />
           </Pressable>
-        </View>
+        </ScrollView>
 
         {/* Inline iOS date picker, shown as a sheet under the
             field tapped. iOS 14+ "compact" presentation feels
@@ -415,21 +471,25 @@ export function TransactionAdderModal({ visible, onClose }: Props) {
           </Pressable>
         </Modal>
 
-        {/* Custom Keypad Footer */}
+        {/* Custom Keypad Footer — tightened density (smaller button
+            height + mb-2 row gap + smaller bottom padding) so the
+            wallet row above sits within the scrollable form area
+            instead of being pushed off the bottom of the iPad
+            formSheet's available height. */}
         <View
-          className="bg-surface-1 pt-4 pb-8 px-6 rounded-t-[40px]"
+          className="bg-surface-1 pt-3 pb-5 px-6 rounded-t-[40px]"
           style={{ borderTopWidth: 1, borderTopColor: themeColors.hairline }}>
-          <View className="flex-row justify-between mb-3">
+          <View className="flex-row justify-between mb-2">
             <KeypadBtn label="1" onPress={() => handleKeyPress('1')} themeColors={themeColors} />
             <KeypadBtn label="2" onPress={() => handleKeyPress('2')} themeColors={themeColors} />
             <KeypadBtn label="3" onPress={() => handleKeyPress('3')} themeColors={themeColors} />
           </View>
-          <View className="flex-row justify-between mb-3">
+          <View className="flex-row justify-between mb-2">
             <KeypadBtn label="4" onPress={() => handleKeyPress('4')} themeColors={themeColors} />
             <KeypadBtn label="5" onPress={() => handleKeyPress('5')} themeColors={themeColors} />
             <KeypadBtn label="6" onPress={() => handleKeyPress('6')} themeColors={themeColors} />
           </View>
-          <View className="flex-row justify-between mb-3">
+          <View className="flex-row justify-between mb-2">
             <KeypadBtn label="7" onPress={() => handleKeyPress('7')} themeColors={themeColors} />
             <KeypadBtn label="8" onPress={() => handleKeyPress('8')} themeColors={themeColors} />
             <KeypadBtn label="9" onPress={() => handleKeyPress('9')} themeColors={themeColors} />
@@ -447,10 +507,11 @@ export function TransactionAdderModal({ visible, onClose }: Props) {
 
           <Pressable
             onPress={handleSave}
-            className="bg-accent-coral mt-6 py-4 rounded-full items-center justify-center active:scale-95"
+            className="bg-accent-coral mt-4 py-3 rounded-full items-center justify-center active:scale-95"
             style={{ boxShadow: '0 0 24px rgba(255, 107, 74, 0.45)' }}>
             <Text className="font-jakarta-bold text-white text-base">Save Transaction</Text>
           </Pressable>
+        </View>
         </View>
       </SafeAreaView>
     </Modal>
@@ -469,7 +530,7 @@ function KeypadBtn({ label, icon, color, onPress, themeColors }: KeypadBtnProps)
   return (
     <Pressable
       onPress={onPress}
-      className="w-24 h-14 bg-surface-2 border border-hairline rounded-2xl justify-center items-center active:bg-surface-3">
+      className="w-24 h-12 bg-surface-2 border border-hairline rounded-2xl justify-center items-center active:bg-surface-3">
       {icon ? (
         <Ionicons name={icon} size={22} color={color || themeColors.textHigh} />
       ) : (

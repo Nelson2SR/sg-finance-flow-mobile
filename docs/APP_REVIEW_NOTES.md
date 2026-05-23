@@ -18,8 +18,8 @@ is comparable in scope to Mint, YNAB, or Monarch.
 DEMO ACCOUNT (please use this — the app uses phone OTP and you
 will not receive a real SMS to a review device)
 
-  Phone number:  +6512345678
-  OTP code:      123456
+  Phone number:  +15555550199
+  OTP code:      846129
 
 The backend recognises this exact (phone, OTP) pair as an App Review
 override: no SMS is sent, no Twilio call is made, and the credential
@@ -31,8 +31,8 @@ end users.
 WHAT TO TEST
 
   1. Sign in flow
-     - Enter +6512345678 → tap Send code
-     - Enter 123456 → tap Verify
+     - Enter +15555550199 → tap Send code
+     - Enter 846129 → tap Verify
      - On first login, you'll land on a "Set up your profile" screen.
        Type any name → tap Continue. You're in.
 
@@ -168,19 +168,19 @@ Result: **Rated 4+**
 
 ## Backend pre-submission checklist
 
-- [ ] `APP_REVIEW_PHONE=+6512345678` set on the production backend (env var)
-- [ ] `APP_REVIEW_OTP=123456` set on the production backend (env var)
+- [ ] `APP_REVIEW_PHONE=+15555550199` set on the production backend (env var)
+- [ ] `APP_REVIEW_OTP=846129` set on the production backend (env var)
 - [ ] Verified with `curl`:
   ```
   curl -sX POST https://vaultwise-api.onrender.com/api/v1/auth/phone/request \
     -H "Content-Type: application/json" \
-    -d '{"phone":"+6512345678"}'
+    -d '{"phone":"+15555550199"}'
   # → {"status":"sent"}
 
   curl -sX POST https://vaultwise-api.onrender.com/api/v1/auth/phone/verify \
     -H "Content-Type: application/json" \
-    -d '{"phone":"+6512345678","otp":"123456"}'
-  # → {"user_exists": false, "signup_token": "...", "phone": "+6512345678"}
+    -d '{"phone":"+15555550199","otp":"846129"}'
+  # → {"user_exists": false, "signup_token": "...", "phone": "+15555550199"}
   ```
 - [ ] Production backend is on HTTPS with TLS 1.3 (verify: `nmap --script ssl-enum-ciphers -p 443 vaultwise-api.onrender.com`)
 - [ ] Privacy policy is reachable at the URL provided in ASC

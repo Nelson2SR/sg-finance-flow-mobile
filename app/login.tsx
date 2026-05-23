@@ -222,13 +222,12 @@ export default function LoginScreen() {
         ? "We'll text you a one-time code."
         : 'Sign in to your private vault.';
 
-  // Web: constrain the form to a typical mobile-card width so the
-  // layout doesn't stretch full-window on desktop browsers. On native
-  // the form is centred in a scroll view that grows to fill the screen.
-  const innerContainerClass =
-    Platform.OS === 'web'
-      ? 'px-6 w-full max-w-md mx-auto'
-      : 'px-6';
+  // Cap the form to a typical mobile-card width and centre it. On
+  // desktop web this stops the layout stretching full-window; on iPad
+  // it stops the form looking sparse and stretched across the whole
+  // screen (App Review Guideline 4 on iPad Air 11"). On iPhone the
+  // viewport is narrower than max-w-md so the cap is a no-op.
+  const innerContainerClass = 'px-6 w-full max-w-md mx-auto';
 
   return (
     <Surface halo>

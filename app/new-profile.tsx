@@ -35,7 +35,7 @@ import { useVaultGroupsStore } from '../store/useVaultGroupsStore';
 export default function NewProfileScreen() {
   const router = useRouter();
   const themeColors = useThemeColors();
-  const { accessToken, user, logout } = useAuth();
+  const { accessToken, user, logout, updateUser } = useAuth();
 
   const [displayName, setDisplayName] = useState('');
   const [isBusy, setIsBusy] = useState(false);
@@ -61,7 +61,18 @@ export default function NewProfileScreen() {
     }
     setIsBusy(true);
     try {
-      await updateProfile(accessToken, { display_name: trimmed });
+      const updated = await updateProfile(accessToken, { display_name: trimmed });
+      // Push the saved name into the in-memory AuthContext user —
+      // without this the API write persists server-side but every
+      // screen keeps reading the null display_name from signup and
+      // falls back to the "Account #N" placeholder until a cold
+      // relaunch. (The Profile edit screen already does this.)
+      updateUser({
+        id: updated.id,
+        display_name: updated.display_name,
+        avatar_url: updated.avatar_url,
+        email: updated.email,
+      });
       // Backend renamed the auto-created "My Vault" → display_name in
       // the same request. Refresh the local store so the home tab
       // doesn't keep showing the stale placeholder until next reload.
@@ -83,10 +94,10 @@ export default function NewProfileScreen() {
       focused === name ? 'border-accent-coral' : 'border-hairline'
     }`;
 
-  const innerContainerClass =
-    Platform.OS === 'web'
-      ? 'px-6 w-full max-w-md mx-auto'
-      : 'px-6';
+  // Cap + centre on every platform: phone width is below max-w-md so
+  // it's a no-op there, but it prevents the form stretching across an
+  // iPad Air 11" / desktop-web viewport (App Review Guideline 4).
+  const innerContainerClass = 'px-6 w-full max-w-md mx-auto';
 
   return (
     <Surface halo>
@@ -137,11 +148,9 @@ export default function NewProfileScreen() {
               onFocus={() => setFocused('name')}
               onBlur={() => setFocused(null)}
             />
-            {user?.id ? (
-              <Text className="font-jakarta text-text-low text-[11px] mt-2 px-1">
-                Account #{user.id} — you can change this anytime in Settings.
-              </Text>
-            ) : null}
+            <Text className="font-jakarta text-text-low text-[11px] mt-2 px-1">
+              You can change this anytime in Profile.
+            </Text>
           </View>
 
           <NeonButton size="lg" block loading={isBusy} onPress={handleContinue}>

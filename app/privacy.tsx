@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -13,7 +13,12 @@ import {
   listSavedBanks,
 } from '../lib/bankPasswords';
 import { hasAiConsent, revokeAiConsent } from '../lib/aiConsent';
-import { AI_PROVIDER_NAME, AI_PROVIDER_SHORT } from '../constants/Config';
+import {
+  AI_PROVIDER_NAME,
+  AI_PROVIDER_SHORT,
+  PRIVACY_POLICY_URL,
+  TERMS_OF_SERVICE_URL,
+} from '../constants/Config';
 
 export default function PrivacyScreen() {
   const router = useRouter();
@@ -221,7 +226,7 @@ export default function PrivacyScreen() {
           </GradientCard>
 
           {/* ── Privacy contract callout ───────────────────────────────── */}
-          <View className="mb-12 px-1">
+          <View className="mb-8 px-1">
             <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-2">
               Our privacy contract
             </Text>
@@ -231,6 +236,34 @@ export default function PrivacyScreen() {
               over TLS, used in memory to decrypt the file, and immediately
               discarded. It is never written to disk and never stored in our database.
             </Text>
+          </View>
+
+          {/* ── Full legal documents ───────────────────────────────────────
+              The login screen links these too, but a signed-in user
+              reviewing Privacy must also be able to reach the canonical
+              hosted policy in-app (App Review Guideline 5.1.1). Same
+              Linking.openURL pattern as login.tsx. */}
+          <View className="mb-12 px-1">
+            <Text className="font-jakarta-bold text-text-low text-[10px] uppercase tracking-widest mb-3">
+              Legal
+            </Text>
+            <Pressable
+              onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}
+              className="flex-row justify-between items-center py-3">
+              <Text className="font-jakarta-bold text-accent-coral text-sm">
+                Privacy Policy
+              </Text>
+              <Ionicons name="open-outline" size={16} color="#FF6B4A" />
+            </Pressable>
+            <View style={{ height: 1, backgroundColor: themeColors.hairline }} />
+            <Pressable
+              onPress={() => Linking.openURL(TERMS_OF_SERVICE_URL)}
+              className="flex-row justify-between items-center py-3">
+              <Text className="font-jakarta-bold text-accent-coral text-sm">
+                Terms of Service
+              </Text>
+              <Ionicons name="open-outline" size={16} color="#FF6B4A" />
+            </Pressable>
           </View>
         </ScrollView>
       </SafeAreaView>
