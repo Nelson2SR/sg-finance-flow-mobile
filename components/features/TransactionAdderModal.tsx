@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format, isToday, isYesterday } from 'date-fns';
 import { useRouter } from 'expo-router';
+import { useColorScheme } from 'nativewind';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { useCategoriesStore } from '../../store/useCategoriesStore';
 import { useThemeColors } from '../../hooks/use-theme-colors';
@@ -21,6 +22,10 @@ interface Props {
 
 export function TransactionAdderModal({ visible, onClose }: Props) {
   const themeColors = useThemeColors();
+  // Follow the app's color scheme so the inline date picker's numbers
+  // stay legible — hardcoding "light" rendered dark-grey day numbers
+  // on the dark sheet background in dark mode (effectively invisible).
+  const { colorScheme } = useColorScheme();
   const router = useRouter();
   const [amount, setAmount] = useState('0');
   const [type, setType] = useState<'EXPENSE' | 'INCOME'>('EXPENSE');
@@ -394,7 +399,7 @@ export function TransactionAdderModal({ visible, onClose }: Props) {
                     }
                     if (selected) setDate(selected);
                   }}
-                  themeVariant="light"
+                  themeVariant={colorScheme === 'dark' ? 'dark' : 'light'}
                 />
               </Pressable>
             </Pressable>

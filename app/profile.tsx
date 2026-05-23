@@ -30,6 +30,7 @@ import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
+import { useColorScheme } from 'nativewind';
 
 import { GradientCard, Surface } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
@@ -53,6 +54,9 @@ const GENDER_OPTIONS: { value: Gender; label: string; icon: keyof typeof Ionicon
 export default function ProfileScreen() {
   const router = useRouter();
   const themeColors = useThemeColors();
+  // Drives the DateTimePicker's themeVariant — hardcoding "light"
+  // made day numbers near-invisible on the dark sheet in dark mode.
+  const { colorScheme } = useColorScheme();
   const { user, accessToken, updateUser, logout } = useAuth();
 
   const [extras, setExtras] = useState<ProfileExtras>({});
@@ -464,7 +468,7 @@ export default function ProfileScreen() {
                   display={Platform.OS === 'ios' ? 'inline' : 'default'}
                   maximumDate={new Date()}
                   onChange={handlePickBirthday}
-                  themeVariant="light"
+                  themeVariant={colorScheme === 'dark' ? 'dark' : 'light'}
                 />
               </Pressable>
             </Pressable>

@@ -16,6 +16,7 @@ import { BlurView } from 'expo-blur';
 import { ScanResponse, ScannedTransaction } from '../../services/geminiService';
 import { useCategoriesStore } from '../../store/useCategoriesStore';
 import { useThemeColors } from '../../hooks/use-theme-colors';
+import { resolveCategoryStyle, tintWithAlpha } from '../../lib/categoryStyle';
 
 interface MagicScanModalProps {
   visible: boolean;
@@ -51,22 +52,6 @@ interface MagicScanReviewBodyProps {
   onEditTransaction?: (index: number, patch: Partial<ScannedTransaction>) => void;
 }
 
-const getTransactionIcon = (category: string | undefined) => {
-  const cat = category?.toLowerCase() || 'other';
-  switch (cat) {
-    case 'dining':
-      return { name: 'restaurant', tint: '#FFB547' };
-    case 'transport':
-      return { name: 'car', tint: '#5BE0B0' };
-    case 'shopping':
-      return { name: 'cart', tint: '#A78BFA' };
-    case 'salary':
-      return { name: 'cash', tint: '#5BE0B0' };
-    default:
-      return { name: 'card', tint: '#FF6B4A' };
-  }
-};
-
 /**
  * The bottom-sheet panel without the surrounding Modal — exported so a
  * caller that owns its own Modal (e.g. the unified Magic Scan flow on
@@ -87,6 +72,10 @@ export const MagicScanReviewBody = ({
   onEditTransaction,
 }: MagicScanReviewBodyProps) => {
   const themeColors = useThemeColors();
+  // Vault Config categories — drive per-row icon + tint so each
+  // reviewed entry shows its own category color, matching the
+  // Activity tab (was previously a uniform coral for every row).
+  const allCategoriesList = useCategoriesStore(s => s.categories);
   const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
   /** Open a per-row edit sheet when this is non-null. */
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -170,7 +159,10 @@ export const MagicScanReviewBody = ({
                 showsVerticalScrollIndicator={false}
                 renderItem={({ item, index }) => {
                   const isSelected = selectedIndices.includes(index);
-                  const icon = getTransactionIcon(item.category);
+                  // Same resolver the Activity tab uses, so the colour
+                  // here matches the one the user will see on the row
+                  // after they commit it to the wallet.
+                  const cat = resolveCategoryStyle(item.category, allCategoriesList);
                   // Outer Pressable opens edit sheet; the icon-circle
                   // has its own Pressable so a tap there toggles
                   // selection without firing the outer onPress (RN
@@ -181,15 +173,25 @@ export const MagicScanReviewBody = ({
                       onPress={() => onEditTransaction && setEditingIndex(index)}
                       className={`mb-3 flex-row items-center p-4 rounded-2xl border ${
                         isSelected
-                          ? 'bg-surface-2 border-accent-coral'
+                          ? 'bg-surface-2'
                           : 'bg-surface-2/60 border-hairline opacity-60'
-                      }`}>
+                      }`}
+                      style={
+                        isSelected
+                          ? { borderWidth: 1, borderColor: cat.tint }
+                          : undefined
+                      }>
                       <Pressable
                         onPress={() => toggleSelect(index)}
                         hitSlop={8}
-                        className={`w-11 h-11 rounded-2xl justify-center items-center mr-3 ${isSelected ? 'bg-accent-coral' : 'bg-surface-3'}`}>
+                        className="w-11 h-11 rounded-2xl justify-center items-center mr-3"
+                        style={{
+                          backgroundColor: isSelected
+                            ? cat.tint
+                            : themeColors.surface3,
+                        }}>
                         <Ionicons
-                          name={isSelected ? (icon.name as any) : 'ellipse-outline'}
+                          name={isSelected ? (cat.name as any) : 'ellipse-outline'}
                           size={18}
                           color={isSelected ? '#fff' : themeColors.textLow}
                         />
@@ -201,8 +203,16 @@ export const MagicScanReviewBody = ({
                           {item.merchant}
                         </Text>
                         <View className="flex-row gap-2 items-center mt-1 flex-wrap">
-                          <View className="bg-surface-3 border border-hairline px-2 py-0.5 rounded-md">
-                            <Text className="font-jakarta-bold text-[8px] uppercase tracking-widest text-text-mid">
+                          <View
+                            className="px-2 py-0.5 rounded-md"
+                            style={{
+                              backgroundColor: tintWithAlpha(cat.tint, 0.14),
+                              borderWidth: 1,
+                              borderColor: tintWithAlpha(cat.tint, 0.35),
+                            }}>
+                            <Text
+                              className="font-jakarta-bold text-[8px] uppercase tracking-widest"
+                              style={{ color: cat.tint }}>
                               {item.category}
                             </Text>
                           </View>
