@@ -10,7 +10,15 @@
  */
 
 import React from 'react';
-import { Linking, Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import {
+  Linking,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 
@@ -42,17 +50,61 @@ const BULLETS: { icon: keyof typeof Ionicons.glyphMap; text: string }[] = [
 
 export const AiConsentModal = ({ visible, onAgree, onDecline }: AiConsentModalProps) => {
   const themeColors = useThemeColors();
+  // iPad / wide-window detection. On iPad Air 11" (834pt wide) Apple
+  // reviewers rejected the previous bottom-sheet layout as "obscured /
+  // cropped": the disclaimer card inside the ScrollView clipped against
+  // the CTA row because the sheet's `maxHeight: 88%` left just enough
+  // room for everything *except* the last paragraph. Switching to a
+  // centered, content-sized card on iPad sidesteps the layout math
+  // entirely and matches the iPad pattern already used by the
+  // TransactionAdderModal cap (480pt).
+  const { width: screenWidth } = useWindowDimensions();
+  const isWide = screenWidth >= 600;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onDecline}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType={isWide ? 'fade' : 'slide'}
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
+      onRequestClose={onDecline}>
       <Pressable
-        style={{ flex: 1, justifyContent: 'flex-end' }}
+        style={{
+          flex: 1,
+          justifyContent: isWide ? 'center' : 'flex-end',
+          // 'stretch' on iPhone keeps the bottom sheet edge-to-edge;
+          // 'center' on iPad pairs with the 480pt maxWidth on the card.
+          alignItems: isWide ? 'center' : 'stretch',
+          paddingHorizontal: isWide ? 24 : 0,
+        }}
         onPress={onDecline}>
         <BlurView intensity={90} tint="dark" className="absolute inset-0" />
         <Pressable
           onPress={(e) => e.stopPropagation()}
-          className="bg-surface-1 rounded-t-[40px] px-6 pt-8 pb-12"
-          style={{ borderTopWidth: 1, borderTopColor: themeColors.hairline, maxHeight: '88%' }}>
+          className={
+            isWide
+              ? 'bg-surface-1 rounded-[32px] px-6 pt-8 pb-8'
+              : 'bg-surface-1 rounded-t-[40px] px-6 pt-8 pb-12'
+          }
+          style={{
+            // iPhone: hairline only on the top edge (bottom-sheet seam).
+            // iPad:   hairline on all sides since the card floats.
+            borderTopWidth: 1,
+            borderTopColor: themeColors.hairline,
+            ...(isWide && {
+              borderLeftWidth: 1,
+              borderRightWidth: 1,
+              borderBottomWidth: 1,
+              borderColor: themeColors.hairline,
+              width: '100%',
+              maxWidth: 480,
+            }),
+            // 88% works on iPhone; on iPad we let the card size to
+            // content so the disclaimer can never clip. The cap is just
+            // a safety net for absurdly large dynamic-type settings.
+            maxHeight: isWide ? '92%' : '88%',
+          }}>
           <View className="items-center mb-5">
             <View
               className="w-14 h-14 rounded-2xl justify-center items-center mb-4"
@@ -64,7 +116,10 @@ export const AiConsentModal = ({ visible, onAgree, onDecline }: AiConsentModalPr
             </Text>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} style={{ flexShrink: 1 }}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 4 }}
+            style={{ flexShrink: 1 }}>
             <Text className="font-jakarta text-text-mid text-sm leading-relaxed text-center mb-6">
               Magic Scan and the Copilot use{' '}
               <Text className="font-jakarta-bold text-text-high">{AI_PROVIDER_NAME}</Text>, a
