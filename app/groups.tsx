@@ -22,7 +22,6 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  Share,
   Text,
   TextInput,
   View,
@@ -37,10 +36,9 @@ import {
   Surface,
 } from '../components/ui';
 import { AvatarStack } from '../components/features/AvatarStack';
+import { InviteSheet } from '../components/features/InviteSheet';
 import { useThemeColors } from '../hooks/use-theme-colors';
 import { useVaultGroupsStore } from '../store/useVaultGroupsStore';
-
-const INVITE_BASE_URL = 'https://sgff.app/invite/';
 
 /**
  * Curated emoji set for the "Create a new group" picker. Hand-picked
@@ -85,6 +83,13 @@ export default function GroupsScreen() {
   const [newName, setNewName] = useState('');
   const [newEmoji, setNewEmoji] = useState<string>(GROUP_EMOJI_OPTIONS[0]);
   const [busyGroupId, setBusyGroupId] = useState<number | null>(null);
+
+  // Invite sheet state — opened by handleInvite once the backend returns
+  // a code. Replaces the old Alert that crammed code + URL into raw text
+  // and broke when shared via WeChat (link unclickable, code truncated
+  // out of the preview). URL is not surfaced today — see InviteSheet
+  // header for why (sgff.app universal-link domain not live yet).
+  const [invite, setInvite] = useState<{ groupName: string; code: string } | null>(null);
 
   // Owner-only edit modal — bottom-sheet name + emoji editor, hidden
   // unless the open id matches a group the user owns. We snapshot
@@ -136,29 +141,9 @@ export default function GroupsScreen() {
     setBusyGroupId(groupId);
     try {
       const { code } = await generateInvite(groupId);
-      const url = INVITE_BASE_URL + code;
       const group = groups.find(g => g.id === groupId);
       const groupName = group?.name ?? 'my vault';
-
-      // Reveal the code in an Alert *before* the Share sheet so dev
-      // testing isn't blocked by the absence of working universal-link
-      // config. The recipient (or a re-login as a different user)
-      // pastes the code into the "Have a code?" row at the top.
-      Alert.alert(
-        'Invite ready',
-        `Code: ${code}\n\nLink: ${url}\n\nShare this code or link with whoever you want to add to "${groupName}".`,
-        [
-          { text: 'Done', style: 'cancel' },
-          {
-            text: 'Share',
-            onPress: () =>
-              Share.share({
-                message: `Join "${groupName}" on VaultWise: ${url}`,
-                url,
-              }),
-          },
-        ],
-      );
+      setInvite({ groupName, code });
     } catch (err: any) {
       Alert.alert(
         'Could not generate invite',
@@ -552,6 +537,13 @@ export default function GroupsScreen() {
             </Pressable>
           </Modal>
         )}
+
+        <InviteSheet
+          visible={invite !== null}
+          groupName={invite?.groupName ?? ''}
+          code={invite?.code ?? ''}
+          onClose={() => setInvite(null)}
+        />
       </SafeAreaView>
     </Surface>
   );
