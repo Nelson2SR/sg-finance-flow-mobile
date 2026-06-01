@@ -135,9 +135,16 @@ export async function deleteAccount(accessToken: string): Promise<void> {
  * will return 401.
  */
 export async function refreshSession(refreshToken: string): Promise<AuthResponse> {
-  const resp = await axios.post<AuthResponse>(`${BASE_URL}/auth/refresh`, {
-    refresh_token: refreshToken,
-  });
+  // Tighter timeout than the global apiClient default: on cold launch
+  // this call blocks AuthGuard, and a 30s wait on a stalled socket is
+  // exactly the "home page took 20s to load" failure mode we're trying
+  // to avoid. 10s is enough for a real Render+Neon cold compute path
+  // (5-8s typical) and well under iOS NSURLSession's fallback.
+  const resp = await axios.post<AuthResponse>(
+    `${BASE_URL}/auth/refresh`,
+    { refresh_token: refreshToken },
+    { timeout: 10_000 },
+  );
   return resp.data;
 }
 

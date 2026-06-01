@@ -13,6 +13,14 @@ const BASE_URL = API_CONFIG.BASE_URL;
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,
+  // Global socket timeout. Default axios is 0 (wait forever) which
+  // means a stalled TCP connection (sleeping host, broken Wi-Fi,
+  // Render edge issue) hangs the home screen behind iOS's NSURLSession
+  // ~25s fallback. 30s here lets the cold-start retry (6s after 502)
+  // still get through, while killing genuinely-stuck sockets fast
+  // enough that the UI can recover. Magic Scan endpoints already
+  // override this to 45-60s at the call site (see uploadService.ts).
+  timeout: 30_000,
   headers: {
     'Content-Type': 'application/json',
   },

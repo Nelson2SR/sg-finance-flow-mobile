@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { financeApi, ApiTransaction, ApiAccount } from '../services/apiClient';
+import { useVaultGroupsStore } from './useVaultGroupsStore';
 
 // Monotonic ID minter. Prevents collisions when many items are added in the
 // same millisecond (e.g. forEach over a batch of scanned transactions).
@@ -321,6 +322,27 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     // backend.
     if (__DEV__ && get().hasUserData) {
       set({ isSyncing: false, hasSynced: true });
+      return;
+    }
+    // No active vault group yet — AuthContext's bootstrap is fire-
+    // and-forget now (saves ~9s of cold-start TTI), so this effect
+    // can race ahead of activeGroupId being set. The home tab's
+    // useEffect refires syncData when activeGroupId lands; until
+    // then, skip the API calls (they'd be rejected without the
+    // X-Vault-Group-Id header) and just trigger the dev seed
+    // fallback so design surfaces stay populated.
+    const groupId = useVaultGroupsStore.getState().activeGroupId;
+    if (groupId == null) {
+      set({ isSyncing: false, hasSynced: true });
+      if (__DEV__ && !get().hasUserData && get().transactions.length === 0) {
+        const { DEV_SEED } = await import('../lib/devSeedData');
+        set({
+          wallets: [...DEV_SEED.wallets],
+          transactions: [...DEV_SEED.transactions],
+          budgets: [...DEV_SEED.budgets],
+          activeWalletId: DEV_SEED.activeWalletId,
+        });
+      }
       return;
     }
     set({ isSyncing: true });

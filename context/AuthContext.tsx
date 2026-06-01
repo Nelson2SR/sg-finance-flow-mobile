@@ -9,9 +9,12 @@ import {
 import { forgetAllBankPasswords } from '../lib/bankPasswords';
 import {
   clearTokens,
+  getCachedUser,
   getTokens,
+  setCachedUser,
   setTokens,
 } from '../lib/secureStore';
+import { isAccessTokenFresh } from '../lib/jwt';
 import { useVaultGroupsStore } from '../store/useVaultGroupsStore';
 import { useFinanceStore } from '../store/useFinanceStore';
 import { useCategoriesStore } from '../store/useCategoriesStore';
@@ -131,27 +134,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Try to refresh on cold launch — this rotates the long-lived
-      // refresh token AND gives us a fresh 1h access token, so the
-      // user doesn't immediately hit a 401 on their first request.
+      // Fast path: if the cached access token still has ≥5 min of life
+      // and we have a cached user object, skip the `/auth/refresh`
+      // round-trip entirely. The 401 interceptor will refresh on demand
+      // if any request later comes back unauthorized. This saves the
+      // 4-10s `/auth/refresh` RTT (Neon cold compute) on every warm
+      // app reopen — and, just as importantly, on a flaky network the
+      // home screen no longer sits behind a 10s refresh timeout.
+      const cachedUser = await getCachedUser();
+      if (cachedUser && isAccessTokenFresh(pair.accessToken)) {
+        setUser(cachedUser);
+        setAccessToken(pair.accessToken);
+        setRefreshToken(pair.refreshToken);
+        // Fire-and-forget — see bootstrapVaultGroups for why this is
+        // not awaited; the home tab gates syncData on activeGroupId.
+        void bootstrapVaultGroups();
+        setIsLoading(false);
+        return;
+      }
+
+      // Slow path: token is stale (or no cached user). Rotate the
+      // refresh token and pick up a fresh access token + user.
       try {
         const fresh = await refreshSession(pair.refreshToken);
         await setTokens({
           accessToken: fresh.access_token,
           refreshToken: fresh.refresh_token,
         });
+        await setCachedUser(fresh.user);
         setUser(fresh.user);
         setAccessToken(fresh.access_token);
         setRefreshToken(fresh.refresh_token);
-        // PERF (queued, see B1 in the home-tab cold-start audit):
-        // this await blocks setIsLoading(false), so AuthGuard keeps the
-        // Tabs unmounted until vault groups land — adds one RTT to TTI.
-        // Switching to a fire-and-forget bootstrap requires the home
-        // tab's syncData to wait for `activeGroupId` (subscribe to
-        // useVaultGroupsStore) before firing, otherwise financeApi
-        // calls go out without the X-Vault-Group-Id header and the
-        // backend rejects them as "no active group".
-        await bootstrapVaultGroups();
+        // Fire-and-forget — the home tab's syncData waits for
+        // `activeGroupId` to land before issuing financeApi calls, so
+        // the X-Vault-Group-Id header isn't missing. Awaiting here
+        // used to add ~9s to TTI on cold Neon compute.
+        void bootstrapVaultGroups();
       } catch {
         // Refresh token is dead — wipe and drop to /login.
         await clearTokens();
@@ -193,10 +211,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       accessToken: resp.access_token,
       refreshToken: resp.refresh_token,
     });
+    await setCachedUser(resp.user);
     setUser(resp.user);
     setAccessToken(resp.access_token);
     setRefreshToken(resp.refresh_token);
-    await bootstrapVaultGroups();
+    // Fire-and-forget — login is on the user's blocking path (OTP
+    // verify is in flight on /login). Letting it resolve before vault
+    // groups land means the router transitions to /(tabs) ~1 RTT
+    // sooner; the home tab's syncData gates on activeGroupId.
+    void bootstrapVaultGroups();
   };
 
   /**
@@ -269,7 +292,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAuthenticated: !!accessToken,
         login,
         logout,
-        updateUser: setUser,
+        // Mirror profile-edit updates into the SecureStore cache so a
+        // cold restart's fast-path doesn't restore the pre-edit user.
+        updateUser: (next: AuthUser) => {
+          setUser(next);
+          void setCachedUser(next);
+        },
       }}>
       {children}
     </AuthContext.Provider>

@@ -153,14 +153,22 @@ export default function HomeScreen() {
     // Skip the backend sync while the dev auth bypass is on — the seeded
     // fake token won't validate against FastAPI and the 401 used to
     // light up LogBox on every reload. Real auth flows still sync.
-    if (isAuthenticated && !DEV_DISABLE_AUTH) {
+    //
+    // Gate on `activeGroupId !== null` so financeApi calls always
+    // carry the `X-Vault-Group-Id` header. AuthContext used to await
+    // `bootstrapVaultGroups` before releasing AuthGuard, which guaranteed
+    // a group was active by the time Home mounted — but that added ~9s
+    // to cold-start TTI on Neon cold compute. Now bootstrap is fire-and-
+    // forget; this effect refires the moment activeGroupId lands and
+    // sync happens then.
+    if (isAuthenticated && !DEV_DISABLE_AUTH && activeGroupId !== null) {
       syncData();
       // Pull the user's persisted categories + labels from backend so
       // any customization survives a reinstall. First sync on a fresh
       // user also bootstraps the local seeds up to the backend.
       syncCategoriesFromBackend();
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, activeGroupId]);
 
   const extendedWallets = [
     ...wallets,

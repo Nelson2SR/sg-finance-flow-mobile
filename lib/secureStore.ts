@@ -13,10 +13,23 @@ import * as SecureStore from 'expo-secure-store';
 
 const KEY_ACCESS = 'auth.accessToken';
 const KEY_REFRESH = 'auth.refreshToken';
+// Cache the user object alongside tokens so cold-start can short-
+// circuit `/auth/refresh` when the access token is still fresh — the
+// refresh response is the only place the user object normally lands,
+// so without this we have no display_name / avatar to seed AuthContext
+// from on a fast-path launch.
+const KEY_USER = 'auth.user';
 
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
+}
+
+export interface CachedAuthUser {
+  id: number;
+  display_name: string | null;
+  avatar_url: string | null;
+  email: string | null;
 }
 
 export async function getTokens(): Promise<TokenPair | null> {
@@ -39,7 +52,22 @@ export async function clearTokens(): Promise<void> {
   await Promise.all([
     SecureStore.deleteItemAsync(KEY_ACCESS),
     SecureStore.deleteItemAsync(KEY_REFRESH),
+    SecureStore.deleteItemAsync(KEY_USER),
   ]);
+}
+
+export async function setCachedUser(user: CachedAuthUser): Promise<void> {
+  await SecureStore.setItemAsync(KEY_USER, JSON.stringify(user));
+}
+
+export async function getCachedUser(): Promise<CachedAuthUser | null> {
+  const raw = await SecureStore.getItemAsync(KEY_USER);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as CachedAuthUser;
+  } catch {
+    return null;
+  }
 }
 
 /**
