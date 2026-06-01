@@ -473,16 +473,22 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 120 : 100 }}
         refreshControl={
-          // Pull-to-refresh re-fetches everything group-scoped:
-          // wallets, transactions, categories, labels. Using
-          // `isSyncing` directly means the spinner stays up as long as
-          // the actual fetch is in flight (no fake fixed-duration UX).
+          // Pull-to-refresh re-fetches the volatile data only —
+          // wallets + transactions. Categories + labels are intentionally
+          // skipped: they're refetched on cold-start (the mount effect)
+          // and updated in-place when the user edits them in Vault
+          // Config, so refetching them on every PTR was waste — and on
+          // the current backend it was expensive waste (4 parallel
+          // requests serialised through one FastAPI worker → ~10s for
+          // PTR). Dropping these two halves the fan-out → ~4s PTR until
+          // the backend async-DB work lands. Using `isSyncing` directly
+          // means the spinner stays up as long as the actual fetch is
+          // in flight (no fake fixed-duration UX).
           <RefreshControl
             refreshing={isSyncing}
             onRefresh={() => {
               if (isAuthenticated && !DEV_DISABLE_AUTH) {
                 void syncData();
-                void syncCategoriesFromBackend();
               }
             }}
             tintColor="#FF6B4A"
