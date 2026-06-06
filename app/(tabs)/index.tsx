@@ -18,6 +18,8 @@ import { useFocusEffect, useRouter } from 'expo-router';
 
 import { getProfileExtras } from '../../lib/profileExtras';
 import { hasAiConsent, grantAiConsent } from '../../lib/aiConsent';
+import { makeClientFileHash } from '../../lib/clientFileHash';
+import { sumMonthlyActivity } from '../../lib/walletActivity';
 
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { TransactionAdderModal } from '../../components/features/TransactionAdderModal';
@@ -295,7 +297,8 @@ export default function HomeScreen() {
       try {
         const activeWallet = wallets.find(w => w.id === activeWalletId);
         await financeApi.confirmUpload({
-          file_hash: `mobile_${Date.now()}`,
+          // Backend requires a 64-char hex hash; a short tag 500s the endpoint.
+          file_hash: makeClientFileHash(),
           // `bank` is a strict enum (DBS|OCBC|UOB|CITI|UNKNOWN) — the
           // wallet's display name doesn't fit it, so we send UNKNOWN.
           // Once the parser hands back a confidence-typed bank guess
@@ -317,9 +320,14 @@ export default function HomeScreen() {
         });
         syncData();
       } catch (error) {
-        // warn (not error) so LogBox doesn't pop a red banner — the
-        // scan still landed locally; the backend push is best-effort.
         console.warn('Failed to sync scan result to backend', error);
+        // The scan landed locally so the user sees it now, but a failed
+        // backend push means it won't survive logout. Surface that rather
+        // than letting it silently masquerade as saved.
+        Alert.alert(
+          'Saved on this device only',
+          "We couldn't sync these transactions to your account, so they may not appear after you sign out and back in. Pull down to refresh on the Activity tab once you're back online.",
+        );
       }
     }
   };
@@ -352,12 +360,13 @@ export default function HomeScreen() {
     const accent = accentForVaultType(item.type);
     const tint = tintForVaultType(item.type);
     const isManualTracker = item.type === 'PERSONAL';
-    const trackedSpend = transactions
-      .filter(t => t.walletId === item.id && t.type === 'EXPENSE')
-      .reduce((a, b) => a + b.amount, 0);
-    const trackedIncome = transactions
-      .filter(t => t.walletId === item.id && t.type === 'INCOME')
-      .reduce((a, b) => a + b.amount, 0);
+    // "This Month Activity" must be scoped to the current calendar month,
+    // not the wallet's all-time totals.
+    const { income: trackedIncome, expense: trackedSpend } = sumMonthlyActivity(
+      transactions,
+      item.id,
+      new Date(),
+    );
 
     return (
       <View style={{ width }} className="items-center px-6">

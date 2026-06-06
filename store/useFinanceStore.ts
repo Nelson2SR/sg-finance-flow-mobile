@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { financeApi, ApiTransaction, ApiAccount } from '../services/apiClient';
 import { useVaultGroupsStore } from './useVaultGroupsStore';
+import { makeClientFileHash } from '../lib/clientFileHash';
 
 // Monotonic ID minter. Prevents collisions when many items are added in the
 // same millisecond (e.g. forEach over a batch of scanned transactions).
@@ -198,6 +199,45 @@ const txSignature = (tx: {
   return `${tx.walletId}|${day}|${merchant}|${tx.amount.toFixed(2)}|${tx.type}`;
 };
 
+/**
+ * Flush a locally-created transaction to the durable backend via
+ * ``POST /upload/confirm`` — the same path the Magic Scan uses. Manual
+ * entries used to be local-only, so they vanished on logout (the store
+ * is cleared, then ``syncData`` overwrites it with the backend's list).
+ *
+ * Returns silently without a request when no vault group is active: the
+ * backend rejects writes without the ``X-Vault-Group-Id`` header, so
+ * firing then would just 4xx. Those callers keep the local entry; the
+ * next successful ``syncData`` (once the group resolves) is the recovery
+ * point. Best-effort by design — a network/backend hiccup must never
+ * lose the row the user just saw land locally.
+ */
+async function persistManualTransaction(tx: Transaction, wallet?: Wallet): Promise<void> {
+  const groupId = useVaultGroupsStore.getState().activeGroupId;
+  if (groupId == null) return;
+
+  await financeApi.confirmUpload({
+    // Backend requires a 64-char hex hash; a short tag 500s the endpoint.
+    file_hash: makeClientFileHash(),
+    // `bank` is a strict enum (DBS|OCBC|UOB|CITI|UNKNOWN); a manual entry
+    // has no statement, so it's always UNKNOWN.
+    bank: 'UNKNOWN',
+    account_type: wallet?.type === 'PERSONAL' ? 'SAVINGS' : 'CREDIT_CARD',
+    account_name: wallet?.name || 'Default',
+    transactions: [
+      {
+        tx_date: tx.date.toISOString().slice(0, 10),
+        description: tx.merchant,
+        amount: tx.amount,
+        direction: tx.type === 'INCOME' ? 'CREDIT' : 'DEBIT',
+        category: tx.category,
+        currency: wallet?.currency ?? 'SGD',
+        labels: tx.labels ?? [],
+      },
+    ],
+  });
+}
+
 
 export const useFinanceStore = create<FinanceState>((set, get) => ({
   // Empty until `syncData` populates from the backend. A brand-new user
@@ -256,18 +296,29 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     hasUserData: true,
   })),
 
-  addTransaction: (tx, skipSync = false) => set((state) => {
+  addTransaction: (tx, skipSync = false) => {
     // Generate new tx and adjust wallet balance logically
-    const newTx = { ...tx, id: mintId('tx'), date: tx.date || new Date() };
-
+    const newTx: Transaction = { ...tx, id: mintId('tx'), date: tx.date || new Date() };
     const modifier = tx.type === 'INCOME' ? tx.amount : -tx.amount;
+    const wallet = get().wallets.find(w => w.id === tx.walletId);
 
-    return {
+    set((state) => ({
       transactions: [newTx, ...state.transactions],
       wallets: state.wallets.map(w => w.id === tx.walletId ? { ...w, balance: w.balance + modifier } : w),
       hasUserData: true,
-    };
-  }),
+    }));
+
+    // Durably persist the entry so it survives logout/login. Fire-and-
+    // forget: the local store is already updated, so the user sees the
+    // entry immediately; a failed flush warns but never blocks the UI or
+    // discards the row. `skipSync` lets internal callers (e.g. replaying
+    // backend-sourced rows) opt out and avoid an echo write.
+    if (!skipSync) {
+      void persistManualTransaction(newTx, wallet).catch((error) => {
+        console.warn('Failed to persist manual transaction to backend', error);
+      });
+    }
+  },
 
   addTransactionsBatch: (txs) => {
     const state = get();
